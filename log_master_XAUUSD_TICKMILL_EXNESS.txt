@@ -2616,3 +2616,22 @@
 2026-02-25 15:41:26 - 🚨 [BÁO ĐỘNG ĐỎ] LỆCH CHÂN!!! TICKMILL: 1 lệnh | EXNESS: 2 lệnh.
 2026-02-25 15:41:36 - 🚨 [BÁO ĐỘNG ĐỎ] LỆCH CHÂN!!! TICKMILL: 1 lệnh | EXNESS: 2 lệnh.
 2026-02-25 15:42:32 - 💰 GIÁ ĐÓNG BĂNG ĐỦ 300ms! CHỐT LỜI TH1 - 1 LỆNH! (Đã giữ > 180s). Lệch: 0.13.
+2026-02-25 15:43:54 - 🔄 [HOT RELOAD] Lệch 0.2|0.11|300.0ms, Max 3, Cooldown 60s, Hold 180s, Vol: 0.01/0.01
+2026-02-25 15:43:54 - 🔄 [HOT RELOAD] Lệch 0.2|0.11|300.0ms, Max 3, Cooldown 60s, Hold 180s, Vol: 0.01/0.01
+2026-02-25 15:43:54 - 🔄 [HOT RELOAD] Lệch 0.2|0.11|300.0ms, Max 3, Cooldown 60s, Hold 180s, Vol: 0.01/0.01
+2026-02-25 15:43:54 - 🔄 [HOT RELOAD] Lệch 0.2|0.11|300.0ms, Max 3, Cooldown 60s, Hold 180s, Vol: 0.01/0.01
+2026-02-25 15:43:54 - 🔄 [HOT RELOAD] Lệch 0.2|0.11|300.0ms, Max 3, Cooldown 60s, Hold 180s, Vol: 0.01/0.01
+2026-02-25 15:44:04 - 🔄 [HOT RELOAD] Lệch 0.2|0.11|300.0ms, Max 3, Cooldown 60s, Hold 180s, Vol: 0.01/0.01
+2026-02-25 15:44:05 - 🔄 [HOT RELOAD] Lệch 0.2|0.11|300.0ms, Max 3, Cooldown 60s, Hold 180s, Vol: 0.01/0.01
+2026-02-25 15:44:08 - 🔄 [HOT RELOAD] Lệch 0.2|0.11|300.0ms, Max 3, Cooldown 60s, Hold 180s, Vol: 0.01/0.01
+2026-02-25 15:44:08 - 🔄 [HOT RELOAD] Lệch 0.2|0.11|300.0ms, Max 3, Cooldown 60s, Hold 180s, Vol: 0.01/0.01
+2026-02-25 15:44:08 - 🔄 [HOT RELOAD] Lệch 0.2|0.11|300.0ms, Max 3, Cooldown 60s, Hold 180s, Vol: 0.01/0.01
+2026-02-25 15:44:08 - 🔄 [HOT RELOAD] Lệch 0.2|0.11|300.0ms, Max 3, Cooldown 60s, Hold 180s, Vol: 0.01/0.01
+2026-02-25 15:44:08 - 🔄 [HOT RELOAD] Lệch 0.2|0.11|300.0ms, Max 3, Cooldown 60s, Hold 180s, Vol: 0.01/0.01
+2026-02-25 15:44:20 - 🔄 [HOT RELOAD] Lệch 0.2|0.11|300.0ms, Max 3, Cooldown 60s, Hold 180s, Vol: 0.01/0.01
+2026-02-25 15:44:20 - 🔄 [HOT RELOAD] Lệch 0.2|0.11|300.0ms, Max 3, Cooldown 60s, Hold 180s, Vol: 0.01/0.01
+2026-02-25 15:44:21 - 🔥 GIÁ ĐÓNG BĂNG ĐỦ 300ms! Lệch 0.47. BÓP CÒ TH1!!!
+2026-02-25 15:44:23 - 🔄 [HOT RELOAD] Lệch 0.2|0.11|300.0ms, Max 3, Cooldown 60s, Hold 180s, Vol: 0.01/0.01
+2026-02-25 15:44:24 - 🔄 [HOT RELOAD] Lệch 0.2|0.11|300.0ms, Max 3, Cooldown 60s, Hold 180s, Vol: 0.01/0.01
+2026-02-25 15:44:24 - 🔄 [HOT RELOAD] Lệch 0.2|0.11|300.0ms, Max 3, Cooldown 60s, Hold 180s, Vol: 0.01/0.01
+2026-02-25 15:44:24 - 🔄 [HOT RELOAD] Lệch 0.2|0.11|300.0ms, Max 3, Cooldown 60s, Hold 180s, Vol: 0.01/0.01
