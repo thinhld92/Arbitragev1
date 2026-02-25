@@ -2635,3 +2635,11 @@
 2026-02-25 15:44:24 - 🔄 [HOT RELOAD] Lệch 0.2|0.11|300.0ms, Max 3, Cooldown 60s, Hold 180s, Vol: 0.01/0.01
 2026-02-25 15:44:24 - 🔄 [HOT RELOAD] Lệch 0.2|0.11|300.0ms, Max 3, Cooldown 60s, Hold 180s, Vol: 0.01/0.01
 2026-02-25 15:44:24 - 🔄 [HOT RELOAD] Lệch 0.2|0.11|300.0ms, Max 3, Cooldown 60s, Hold 180s, Vol: 0.01/0.01
+2026-02-25 15:46:44 - 🔥 GIÁ ĐÓNG BĂNG ĐỦ 300ms! Lệch 0.31. BÓP CÒ TH1!!!
+2026-02-25 15:48:50 - 💰 GIÁ ĐÓNG BĂNG ĐỦ 300ms! CHỐT LỜI TH1 - 1 LỆNH! (Đã giữ > 180s). Lệch: 0.23.
+2026-02-25 15:49:32 - 🔥 GIÁ ĐÓNG BĂNG ĐỦ 300ms! Lệch 0.30. BÓP CÒ TH1!!!
+2026-02-25 15:50:23 - 💰 GIÁ ĐÓNG BĂNG ĐỦ 300ms! CHỐT LỜI TH1 - 1 LỆNH! (Đã giữ > 180s). Lệch: 0.12.
+2026-02-25 15:51:12 - 🔥 GIÁ ĐÓNG BĂNG ĐỦ 300ms! Lệch 0.24. BÓP CÒ TH1!!!
+2026-02-25 15:54:06 - 💰 GIÁ ĐÓNG BĂNG ĐỦ 300ms! CHỐT LỜI TH1 - 1 LỆNH! (Đã giữ > 180s). Lệch: 0.12.
+2026-02-25 15:54:17 - 💰 GIÁ ĐÓNG BĂNG ĐỦ 300ms! CHỐT LỜI TH1 - 1 LỆNH! (Đã giữ > 180s). Lệch: 0.11.
+2026-02-25 15:55:11 - 🔥 GIÁ ĐÓNG BĂNG ĐỦ 300ms! Lệch 0.31. BÓP CÒ TH2!!!

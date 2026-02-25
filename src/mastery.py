@@ -22,7 +22,11 @@ args = parser.parse_args()
 
 os.system(f"title 🧠 MASTER BRAIN - {args.pair_id}")
 
-log_filename = f"log_master_{args.pair_id}.txt"
+# --- TỰ ĐỘNG TẠO FOLDER LOGS NẾU CHƯA CÓ ---
+log_dir = "logs"
+os.makedirs(log_dir, exist_ok=True)
+
+log_filename = os.path.join(log_dir, f"log_master_{args.pair_id}.txt")
 
 logging.basicConfig(
     level=logging.INFO, 
@@ -32,6 +36,7 @@ logging.basicConfig(
         RotatingFileHandler(log_filename, maxBytes=5*1024*1024, backupCount=3, encoding='utf-8')
     ]
 )
+
 logging.info(f"=== KHỞI ĐỘNG MASTER BRAIN {args.pair_id} ===")
 
 with open(CONFIG_FILE, 'r', encoding='utf-8') as f:

@@ -1,0 +1,21 @@
+# Thư mục chứa Logs
+logs/
+*.log
+log_*.txt
+
+# Môi trường ảo (Virtual Environment)
+venv/
+env/
+.venv/
+
+# Python Cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+# IDE / Editor
+.vscode/
+.idea/
+
+# File cấu hình chứa API Key / Password (Nên tạo config.example.json để push lên thay thế)
+# config.json
