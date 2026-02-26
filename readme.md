@@ -94,6 +94,7 @@ Trong quá trình Test, nếu Bot bị ôm lệnh ảo do lỗi mạng hoặc đ
 
 Bash
 redis-cli FLUSHALL
+memurai-cli FLUSHALL
 (Khởi động lại Bot sau khi chạy lệnh này, Master sẽ báo "Bắt đầu với trí nhớ trống rỗng").
 
 2. Quản lý Log

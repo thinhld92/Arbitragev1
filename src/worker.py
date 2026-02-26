@@ -72,7 +72,7 @@ def thuc_thi_dong_1_lenh(pos, current_tick, comment):
         "position": pos.ticket, 
         "price": price,
         "deviation": 20,
-        "magic": 999999,
+        "magic": 0,
         "comment": comment,
         "type_time": mt5.ORDER_TIME_GTC,
         "type_filling": mt5.ORDER_FILLING_IOC,
@@ -92,7 +92,7 @@ def thuc_thi_dong_1_lenh(pos, current_tick, comment):
 def thuc_thi_chi_thi(chi_thi, current_tick):
     action = chi_thi.get("action")
     volume = float(chi_thi.get("volume", 0.01))
-    comment = chi_thi.get("comment", "ban tia")
+    comment = chi_thi.get("comment", "")
     
     acc_info = mt5.account_info()
     if not acc_info:
@@ -116,7 +116,7 @@ def thuc_thi_chi_thi(chi_thi, current_tick):
             "type": order_type,
             "price": price,
             "deviation": 20, 
-            "magic": 999999, 
+            "magic": 0, 
             "comment": comment,
             "type_time": mt5.ORDER_TIME_GTC,
             "type_filling": mt5.ORDER_FILLING_IOC, 
@@ -134,7 +134,7 @@ def thuc_thi_chi_thi(chi_thi, current_tick):
     elif action == "CLOSE_OLDEST":
         count = chi_thi.get("count", 1)
         positions = mt5.positions_get(symbol=args.symbol)
-        comment = chi_thi.get("comment", "Close ban tia")
+        comment = chi_thi.get("comment", "")
         
         if positions:
             lenh_sap_xep = sorted(positions, key=lambda x: x.time_msc)

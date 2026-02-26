@@ -248,7 +248,7 @@ try:
                         print(msg_chot_loi)
                         logging.info(msg_chot_loi)
                         
-                        base_comment = cap_hien_tai.get('comment_close', 'Close ban tia')
+                        base_comment = cap_hien_tai.get('comment_close', '')
                         close_comment = f"{base_comment} {loai_dong}" 
                         
                         chi_thi_dong = {"action": "CLOSE_OLDEST", "count": so_luong_can_dong, "comment": close_comment}
@@ -301,7 +301,7 @@ try:
                         huong_dang_danh = loai_lenh_moi
                         volume_base = cap_hien_tai.get('volume_base', 0.01)
                         volume_diff = cap_hien_tai.get('volume_diff', 0.01)
-                        order_comment = cap_hien_tai.get('comment_entry', 'ban tia')
+                        order_comment = cap_hien_tai.get('comment_entry', '')
                         
                         chi_thi_base = {"action": tin_hieu["lenh_base"], "volume": volume_base, "comment": order_comment}
                         r.lpush(f"QUEUE:ORDER:{cap_hien_tai['base_exchange']}", json.dumps(chi_thi_base))

@@ -66,7 +66,7 @@ print(f"✅ [{args.broker}] Kết nối thành công! Sẵn sàng chiến đấu
 def thuc_thi_chi_thi(chi_thi, current_tick):
     action = chi_thi.get("action")
     volume = float(chi_thi.get("volume", 0.01))
-    comment = chi_thi.get("comment", "ban tia")
+    comment = chi_thi.get("comment", "")
     
     # Lấy thông tin tài khoản hiện tại
     acc_info = mt5.account_info()
@@ -93,7 +93,7 @@ def thuc_thi_chi_thi(chi_thi, current_tick):
             "type": order_type,
             "price": price,
             "deviation": 20, # Độ trượt giá cho phép (points)
-            "magic": 999999, # Số định danh của Bot
+            "magic": 0, # Số định danh của Bot
             "comment": comment,
             "type_time": mt5.ORDER_TIME_GTC,
             "type_filling": mt5.ORDER_FILLING_IOC, # Khớp tức thì hoặc Hủy (Chống treo lệnh)
@@ -111,7 +111,7 @@ def thuc_thi_chi_thi(chi_thi, current_tick):
     elif action == "CLOSE_OLDEST":
         count = chi_thi.get("count", 1)
         positions = mt5.positions_get(symbol=args.symbol)
-        comment = chi_thi.get("comment", "Close ban tia")
+        comment = chi_thi.get("comment", "")
         
         if positions:
             # Sắp xếp các lệnh theo thứ tự CŨ NHẤT nằm trên
@@ -130,7 +130,7 @@ def thuc_thi_chi_thi(chi_thi, current_tick):
                     "position": pos.ticket, 
                     "price": price,
                     "deviation": 20,
-                    "magic": 999999,
+                    "magic": 0,
                     "comment": comment,
                     "type_time": mt5.ORDER_TIME_GTC,
                     "type_filling": mt5.ORDER_FILLING_IOC,

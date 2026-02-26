@@ -18,4 +18,4 @@ __pycache__/
 .idea/
 
 # File cấu hình chứa API Key / Password (Nên tạo config.example.json để push lên thay thế)
-# config.json
+config.json
