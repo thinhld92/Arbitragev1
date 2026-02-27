@@ -4,6 +4,12 @@
     "port": 6379,
     "db": 0
   },
+  "terminal_ui": {
+    "width": 800,
+    "height": 250,
+    "offset_x": 10,
+    "offset_y": 0
+  },
   "brokers": {
     "TICKMILL": {
       "path": "C:\\Program Files\\Tickmill MT5 Terminal\\terminal64.exe"
@@ -22,10 +28,11 @@
       "diff_symbol": "XAUUSD",
       "volume_base": 0.01,
       "volume_diff": 0.01,
-      "deviation_entry": 0.20,
-      "deviation_close": 0.11,
+      "deviation_entry": 0.80,
+      "deviation_close": 0.81,
       "stable_time": 300,
       "cooldown_second": 60,
+      "cooldown_close_second": 3,
       "max_orders": 3,
       "hold_time": 180,
       "comment_entry": " ",

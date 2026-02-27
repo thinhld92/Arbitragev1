@@ -5,6 +5,7 @@ import time
 import argparse
 import os
 import threading 
+from utils.terminal import dan_tran_cua_so
 
 # ==========================================
 # 1. ĐỌC THAM SỐ TỪ TERMINAL
@@ -16,6 +17,12 @@ parser.add_argument("--role", default="WORKER", help="Vai trò của sàn này (
 args = parser.parse_args()
 
 os.system(f"title 👷‍♂️ {args.role} - {args.broker} - {args.symbol}")
+
+# Gọi thẳng ra xài luôn
+if args.role == "BASE":
+    dan_tran_cua_so(2)
+elif args.role == "DIFF":
+    dan_tran_cua_so(3)
 
 # ==========================================
 # 2. ĐỌC FILE CONFIG ĐỂ TÌM ĐƯỜNG DẪN

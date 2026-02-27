@@ -2,9 +2,18 @@ import redis
 import requests
 import json
 import time
+import sys
 import os
 
+# Lùi 1 bước từ 'services' ra 'src' để Python nhìn thấy thư mục 'utils'
+thu_muc_src = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.append(thu_muc_src)
+
+from utils.terminal import dan_tran_cua_so
+
 os.system("title 📨 TELEGRAM SERVICE")
+dan_tran_cua_so(1) # Telegram nằm tầng 1 (trên cùng)
+
 print("📨 Khởi động Dịch vụ Telegram...")
 
 # ==========================================

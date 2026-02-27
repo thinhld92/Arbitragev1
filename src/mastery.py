@@ -9,6 +9,7 @@ from datetime import datetime
 
 # Import Quân Sư
 from utils.trading_logic import check_tin_hieu_arbitrage 
+from utils.terminal import dan_tran_cua_so
 
 CONFIG_FILE = 'config.json'
 last_config_modified = 0  
@@ -21,6 +22,7 @@ parser.add_argument("--pair_id", required=True)
 args = parser.parse_args()
 
 os.system(f"title 🧠 MASTER BRAIN - {args.pair_id}")
+dan_tran_cua_so(4)
 
 # --- TỰ ĐỘNG TẠO FOLDER LOGS NẾU CHƯA CÓ ---
 log_dir = "logs"
@@ -57,6 +59,7 @@ key_state = f"STATE:MASTER:{args.pair_id}"
 dev_entry = cap_hien_tai['deviation_entry']
 dev_close = cap_hien_tai['deviation_close']
 stable_time_sec = cap_hien_tai['stable_time'] / 1000.0  
+cooldown_close_sec = cap_hien_tai.get('cooldown_close_second', 2)
 cooldown_sec = cap_hien_tai['cooldown_second']
 max_orders = cap_hien_tai['max_orders']
 
@@ -177,6 +180,7 @@ try:
                     dev_close = cap_hien_tai['deviation_close']
                     max_orders = cap_hien_tai['max_orders']
                     cooldown_sec = cap_hien_tai['cooldown_second']
+                    cooldown_close_sec = cap_hien_tai.get('cooldown_close_second', 2)
                     hold_time_sec = cap_hien_tai.get('hold_time', 180)
                     stable_time_sec = cap_hien_tai['stable_time'] / 1000.0
                 last_config_modified = current_modified
@@ -230,39 +234,41 @@ try:
                 luu_tri_nho()
 
         # --------------------------------------------------
-        # TRƯỜNG HỢP 1: CÓ TÍN HIỆU ĐÓNG LỆNH CHỐT LỜI (AN TOÀN TUYỆT ĐỐI)
+        # TRƯỜNG HỢP 1: CÓ TÍN HIỆU ĐÓNG LỆNH CHỐT LỜI (CHỈ CHỐT 1 LỆNH & CÓ COOLDOWN)
         # --------------------------------------------------
         if hanh_dong == "DONG_LENH" and so_lenh_thuc_te > 0:
-            lenh_du_tuoi = [t for t in lich_su_vao_lenh if (time.time() - t) >= hold_time_sec]
-            so_luong_can_dong = len(lenh_du_tuoi)
+            dang_cooldown_dong = (time.time() - thoi_diem_vua_ra_lenh_dong) < cooldown_close_sec
             
-            if so_luong_can_dong > 0:
-                thoi_gian_dung_im = time.time() - thoi_diem_nhan_tick_cuoi
+            # Chỉ cho phép xét chốt lệnh nếu đã qua thời gian Cooldown đóng
+            if not dang_cooldown_dong:
+                lenh_du_tuoi = [t for t in lich_su_vao_lenh if (time.time() - t) >= hold_time_sec]
                 
-                if thoi_gian_dung_im >= stable_time_sec:
-                    if not da_xu_ly_vao_lenh_cho_tick_nay: 
-                        chenh_lech_close = tin_hieu.get("chenh_lech", 0)
-                        loai_dong = tin_hieu.get("loai_dong", "UNKNOWN") 
-                        
-                        msg_chot_loi = f"💰 GIÁ ĐÓNG BĂNG ĐỦ {stable_time_sec*1000:.0f}ms! CHỐT LỜI {loai_dong} - {so_luong_can_dong} LỆNH! (Đã giữ > {hold_time_sec}s). Lệch: {chenh_lech_close:.2f}."
-                        print(msg_chot_loi)
-                        logging.info(msg_chot_loi)
-                        
-                        base_comment = cap_hien_tai.get('comment_close', '')
-                        close_comment = f"{base_comment} {loai_dong}" 
-                        
-                        chi_thi_dong = {"action": "CLOSE_OLDEST", "count": so_luong_can_dong, "comment": close_comment}
-                        r.lpush(f"QUEUE:ORDER:{cap_hien_tai['base_exchange']}", json.dumps(chi_thi_dong))
-                        r.lpush(f"QUEUE:ORDER:{cap_hien_tai['diff_exchange']}", json.dumps(chi_thi_dong))
-                        
-                        lich_su_vao_lenh = [t for t in lich_su_vao_lenh if t not in lenh_du_tuoi]
-                        
-                        # --- FIX LỖI HEDGING: KHÔNG ĐƯỢC ÉP QUÊN HƯỚNG! ---
-                        # Chỉ khi nào Worker thực sự đóng sạch lệnh, vòng lặp trên cùng (so_lenh_thuc_te == 0) mới được xóa hướng.
-                        thoi_diem_vua_ra_lenh_dong = time.time() 
-                        da_xu_ly_vao_lenh_cho_tick_nay = True # Khóa cò súng lại, chờ kết quả từ sàn
-                        # ---------------------------------------------------
-                        luu_tri_nho()
+                if len(lenh_du_tuoi) > 0:
+                    thoi_gian_dung_im = time.time() - thoi_diem_nhan_tick_cuoi
+                    
+                    if thoi_gian_dung_im >= stable_time_sec:
+                        if not da_xu_ly_vao_lenh_cho_tick_nay: 
+                            chenh_lech_close = tin_hieu.get("chenh_lech", 0)
+                            loai_dong = tin_hieu.get("loai_dong", "UNKNOWN") 
+                            
+                            msg_chot_loi = f"💰 GIÁ BĂNG {stable_time_sec*1000:.0f}ms! TỈA LỜI {loai_dong} - 1 LỆNH (Đợi {cooldown_close_sec}s). Lệch: {chenh_lech_close:.2f}."
+                            print(msg_chot_loi)
+                            logging.info(msg_chot_loi)
+                            
+                            base_comment = cap_hien_tai.get('comment_close', '')
+                            close_comment = f"{base_comment} {loai_dong}".strip()
+                            
+                            chi_thi_dong = {"action": "CLOSE_OLDEST", "count": 1, "comment": close_comment}
+                            r.lpush(f"QUEUE:ORDER:{cap_hien_tai['base_exchange']}", json.dumps(chi_thi_dong))
+                            r.lpush(f"QUEUE:ORDER:{cap_hien_tai['diff_exchange']}", json.dumps(chi_thi_dong))
+                                                        
+                            # Cập nhật trí nhớ: Chỉ xóa ĐÚNG 1 lệnh cũ nhất khỏi danh sách
+                            lenh_bi_dong = lenh_du_tuoi[0]
+                            lich_su_vao_lenh.remove(lenh_bi_dong)
+                            
+                            thoi_diem_vua_ra_lenh_dong = time.time() # Reset lại đồng hồ Cooldown đóng lệnh
+                            da_xu_ly_vao_lenh_cho_tick_nay = True 
+                            luu_tri_nho()
 
         # --------------------------------------------------
         # TRƯỜNG HỢP 2: CÓ TÍN HIỆU VÀO LỆNH (ÁP DỤNG JS DEBOUNCE)
