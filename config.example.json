@@ -5,8 +5,8 @@
     "db": 0
   },
   "terminal_ui": {
-    "width": 800,
-    "height": 250,
+    "width": 600,
+    "height": 200,
     "offset_x": 10,
     "offset_y": 0
   },
@@ -35,8 +35,8 @@
       "cooldown_close_second": 3,
       "max_orders": 3,
       "hold_time": 180,
-      "comment_entry": " ",
-      "comment_close": " ",
+      "comment_entry": "",
+      "comment_close": "",
       "alert_equity": 100,
       "trading_hours": [
         "00:00-00:30",  

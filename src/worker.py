@@ -80,7 +80,7 @@ def thuc_thi_dong_1_lenh(pos, current_tick, comment):
         "price": price,
         "deviation": 20,
         "magic": 0,
-        "comment": comment,
+        # "comment": comment,
         "type_time": mt5.ORDER_TIME_GTC,
         "type_filling": mt5.ORDER_FILLING_IOC,
     }
@@ -124,7 +124,7 @@ def thuc_thi_chi_thi(chi_thi, current_tick):
             "price": price,
             "deviation": 20, 
             "magic": 0, 
-            "comment": comment,
+            # "comment": comment,
             "type_time": mt5.ORDER_TIME_GTC,
             "type_filling": mt5.ORDER_FILLING_IOC, 
         }
