@@ -74,14 +74,18 @@ if symbol_info is None:
     mt5.shutdown()
     quit()
 
+# TỰ ĐỊNH NGHĨA HẰNG SỐ BỊ THIẾU CỦA THƯ VIỆN MT5 PYTHON
+SYMBOL_FILLING_FOK = 1
+SYMBOL_FILLING_IOC = 2
+
 # Quét bitmask để xem sàn hỗ trợ kiểu khớp lệnh nào
 filling_mode_bitmask = symbol_info.filling_mode
 CACHED_FILLING_MODE = mt5.ORDER_FILLING_IOC # Đặt dự phòng
 
-if filling_mode_bitmask & mt5.SYMBOL_FILLING_IOC:
+if filling_mode_bitmask & SYMBOL_FILLING_IOC:
     CACHED_FILLING_MODE = mt5.ORDER_FILLING_IOC
     ten_filling = "IOC (Khớp hoặc Hủy phần dư)"
-elif filling_mode_bitmask & mt5.SYMBOL_FILLING_FOK:
+elif filling_mode_bitmask & SYMBOL_FILLING_FOK:
     CACHED_FILLING_MODE = mt5.ORDER_FILLING_FOK
     ten_filling = "FOK (Khớp đủ hoặc Hủy toàn bộ)"
 else:
