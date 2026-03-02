@@ -18,7 +18,6 @@ args = parser.parse_args()
 
 os.system(f"title 👷‍♂️ {args.role} - {args.broker} - {args.symbol}")
 
-# Gọi thẳng ra xài luôn
 if args.role == "BASE":
     dan_tran_cua_so(2)
 elif args.role == "DIFF":
@@ -44,13 +43,16 @@ except KeyError:
     print(f"❌ Lỗi: Không tìm thấy cấu hình cho sàn {args.broker} trong config.json")
     quit()
 
-r = redis.Redis(host=redis_conf['host'], port=redis_conf['port'], db=redis_conf['db'], decode_responses=True)
+# Tối ưu Redis
+r = redis.Redis(host=redis_conf['host'], port=redis_conf['port'], db=redis_conf['db'], decode_responses=True, health_check_interval=30)
 
 REDIS_TICK_KEY = f"TICK:{args.broker.upper()}:{args.symbol.upper()}"
 REDIS_POS_KEY = f"POSITION:{args.broker.upper()}:{args.symbol.upper()}"
 REDIS_EQUITY_KEY = f"ACCOUNT:{args.broker.upper()}:EQUITY"
 QUEUE_ORDER_KEY = f"QUEUE:ORDER:{args.broker.upper()}"
 QUEUE_TELEGRAM = "TELEGRAM_QUEUE"
+
+mt5_lock = threading.Lock()
 
 # ==========================================
 # KHỞI TẠO KẾT NỐI MT5
@@ -61,13 +63,37 @@ if not mt5.initialize(path=mt5_path, portable=True, timeout=60000):
     print(f"❌ [{args.broker}] Khởi tạo MT5 thất bại! Mã lỗi: {mt5.last_error()}")
     quit()
 
-print(f"✅ [{args.broker}] Kết nối thành công! Sẵn sàng chiến đấu.")
+# ==========================================
+# 🛡️ FIX: QUÉT VÀ LƯU CACHE FILLING MODE MỘT LẦN DUY NHẤT
+# ==========================================
+mt5.symbol_select(args.symbol, True)
+symbol_info = mt5.symbol_info(args.symbol)
+
+if symbol_info is None:
+    print(f"❌ [{args.broker}] Không tìm thấy mã {args.symbol} trên sàn. Vui lòng kiểm tra lại!")
+    mt5.shutdown()
+    quit()
+
+# Quét bitmask để xem sàn hỗ trợ kiểu khớp lệnh nào
+filling_mode_bitmask = symbol_info.filling_mode
+CACHED_FILLING_MODE = mt5.ORDER_FILLING_IOC # Đặt dự phòng
+
+if filling_mode_bitmask & mt5.SYMBOL_FILLING_IOC:
+    CACHED_FILLING_MODE = mt5.ORDER_FILLING_IOC
+    ten_filling = "IOC (Khớp hoặc Hủy phần dư)"
+elif filling_mode_bitmask & mt5.SYMBOL_FILLING_FOK:
+    CACHED_FILLING_MODE = mt5.ORDER_FILLING_FOK
+    ten_filling = "FOK (Khớp đủ hoặc Hủy toàn bộ)"
+else:
+    CACHED_FILLING_MODE = mt5.ORDER_FILLING_RETURN
+    ten_filling = "RETURN"
+
+print(f"✅ [{args.broker}] Kết nối thành công! Cấu hình Filling Mode: {ten_filling}")
 
 # ==========================================
 # HÀM HỖ TRỢ: ĐÓNG 1 LỆNH (DÙNG CHO THREAD)
 # ==========================================
 def thuc_thi_dong_1_lenh(pos, current_tick, comment):
-    """Hàm này sẽ được ném cho từng thằng Lính đánh thuê chạy độc lập"""
     close_type = mt5.ORDER_TYPE_SELL if pos.type == mt5.ORDER_TYPE_BUY else mt5.ORDER_TYPE_BUY
     price = current_tick.bid if close_type == mt5.ORDER_TYPE_SELL else current_tick.ask
     
@@ -80,15 +106,17 @@ def thuc_thi_dong_1_lenh(pos, current_tick, comment):
         "price": price,
         "deviation": 20,
         "magic": 0,
-        # "comment": comment,
         "type_time": mt5.ORDER_TIME_GTC,
-        "type_filling": mt5.ORDER_FILLING_IOC,
+        "type_filling": CACHED_FILLING_MODE, # <--- SỬ DỤNG CACHE
     }
+    if comment:
+        request["comment"] = comment
     
-    result = mt5.order_send(request)
+    with mt5_lock: 
+        result = mt5.order_send(request)
+        
     if result.retcode == mt5.TRADE_RETCODE_DONE:
         print(f"💰 [{args.broker}] ĐÃ ĐÓNG LỆNH #{pos.ticket} THÀNH CÔNG.")
-        # r.lpush(QUEUE_TELEGRAM, f"💰 <b>[{args.broker}] ĐÃ CHỐT LỜI</b>\nLệnh: #{pos.ticket}")
     else:
         print(f"❌ [{args.broker}] LỖI ĐÓNG LỆNH #{pos.ticket}: {result.comment}")
         r.lpush(QUEUE_TELEGRAM, f"❌ <b>[{args.broker}] LỖI ĐÓNG LỆNH</b>\nTicket: #{pos.ticket} | Lỗi: {result.comment}")
@@ -100,21 +128,11 @@ def thuc_thi_chi_thi(chi_thi, current_tick):
     action = chi_thi.get("action")
     volume = float(chi_thi.get("volume", 0.01))
     comment = chi_thi.get("comment", "")
-    
-    acc_info = mt5.account_info()
-    if not acc_info:
-        print("⚠️ Không lấy được thông tin tài khoản MT5!")
-        return
-        
-    # XỬ LÝ LỆNH BUY / SELL MỞ MỚI
-    if action in ["BUY", "SELL"]:
-        if acc_info.equity < alert_equity:
-            msg = f"⚠️ <b>[{args.broker}] CẢNH BÁO LOW EQUITY</b>\nTài khoản đang có {acc_info.equity:.2f}$, chạm mức cảnh báo ({alert_equity}$). Vui lòng kiểm tra và nạp thêm tiền!\n<i>*Bot vẫn đang tiếp tục vào lệnh...</i>"
-            r.lpush(QUEUE_TELEGRAM, msg)
-            print(f"\n{msg}")
 
-        order_type = mt5.ORDER_TYPE_BUY if action == "BUY" else mt5.ORDER_TYPE_SELL
-        price = current_tick.ask if action == "BUY" else current_tick.bid
+    if action in ["BUY", "SELL"]:
+        is_buy = (action == "BUY")
+        order_type = mt5.ORDER_TYPE_BUY if is_buy else mt5.ORDER_TYPE_SELL
+        price = current_tick.ask if is_buy else current_tick.bid
 
         request = {
             "action": mt5.TRADE_ACTION_DEAL,
@@ -124,42 +142,57 @@ def thuc_thi_chi_thi(chi_thi, current_tick):
             "price": price,
             "deviation": 20, 
             "magic": 0, 
-            # "comment": comment,
             "type_time": mt5.ORDER_TIME_GTC,
-            "type_filling": mt5.ORDER_FILLING_IOC, 
+            "type_filling": CACHED_FILLING_MODE,  # <--- SỬ DỤNG CACHE
         }
+        if comment:
+            request["comment"] = comment
         
-        result = mt5.order_send(request)
+        with mt5_lock: 
+            result = mt5.order_send(request)
+            
         if result.retcode == mt5.TRADE_RETCODE_DONE:
             print(f"🔫 [{args.broker}] ĐÃ BẮN {action} {volume} LOT. Ticket: {result.order}")
-            # r.lpush(QUEUE_TELEGRAM, f"✅ <b>[{args.broker}] VÀO LỆNH {action}</b>\nMã: {args.symbol} | Vol: {volume}\nGiá: {price}")
         else:
             print(f"❌ [{args.broker}] LỖI VÀO LỆNH {action}: {result.comment} ({result.retcode})")
             r.lpush(QUEUE_TELEGRAM, f"❌ <b>[{args.broker}] LỖI {action}</b>\nMã lỗi: {result.retcode} - {result.comment}")
 
-    # XỬ LÝ LỆNH ĐÓNG CÁC LỆNH CŨ (BẮN SONG SONG BẰNG THREAD)
     elif action == "CLOSE_OLDEST":
         count = chi_thi.get("count", 1)
-        positions = mt5.positions_get(symbol=args.symbol)
-        comment = chi_thi.get("comment", "")
+        positions = mt5.positions_get(symbol=args.symbol) 
         
         if positions:
             lenh_sap_xep = sorted(positions, key=lambda x: x.time_msc)
             lenh_can_dong = lenh_sap_xep[:count] 
             
             for pos in lenh_can_dong:
-                # --- TUYỆT KỸ PHÂN THÂN CHUYỂN BÓNG ---
-                # Thay vì tự tay đóng từng lệnh bắt nhau phải chờ, gọi thẳng 1 Thread ra đóng
                 threading.Thread(target=thuc_thi_dong_1_lenh, args=(pos, current_tick, comment)).start()
-                # Vòng lặp lướt qua với tốc độ 0.001ms, gọi ra đủ số Thread rồi kết thúc ngay!
 
 # ==========================================
 # 3. VÒNG LẶP CHIẾN TRANH (MAIN LOOP)
 # ==========================================
 last_tick_time = 0
+thoi_gian_check_mang_cuoi = 0
+dang_co_mang = True 
+
+thoi_gian_check_tk_cuoi = 0 
+equity_canh_bao_da_gui = False
 
 try:
     while True:
+        now = time.time()
+        
+        # 🛡️ KIỂM TRA MẠNG
+        if now - thoi_gian_check_mang_cuoi > 1.0:
+            terminal_info = mt5.terminal_info()
+            dang_co_mang = terminal_info.connected if terminal_info else False
+            thoi_gian_check_mang_cuoi = now
+            
+            if terminal_info is None:
+                print(f"⚠️ [{args.broker}] Mất kết nối nội bộ! Đang thử khởi tạo lại...")
+                mt5.initialize(path=mt5_path, portable=True, timeout=10000)
+
+        # 📈 LẤY GIÁ VÀ CẬP NHẬT TICK
         tick = mt5.symbol_info_tick(args.symbol)
 
         if tick is not None:
@@ -167,31 +200,46 @@ try:
                 tick_data = {
                     "bid": tick.bid,
                     "ask": tick.ask,
-                    "time_msc": tick.time_msc
+                    "time_msc": tick.time_msc,
+                    "connected": dang_co_mang 
                 }
                 r.set(REDIS_TICK_KEY, json.dumps(tick_data))
-                print(f"[{args.broker}] BID: {tick.bid} | ASK: {tick.ask}", end='\r')
+                
+                trang_thai_mang = "OK" if dang_co_mang else "RỚT"
+                print(f"[{args.broker}] BID: {tick.bid} | ASK: {tick.ask} | Mạng: {trang_thai_mang}", end='\r')
+                
                 last_tick_time = tick.time_msc
                 
             thu_tu_master = r.rpop(QUEUE_ORDER_KEY)
             if thu_tu_master:
                 chi_thi = json.loads(thu_tu_master)
                 print(f"\n📨 [{args.broker}] Nhận lệnh từ Master: {chi_thi}")
-                
-                # Gọi Thread tổng để nhận thư và xử lý phân loại
                 threading.Thread(target=thuc_thi_chi_thi, args=(chi_thi, tick)).start()
                 
         else:
             mt5.symbol_select(args.symbol, True)
             time.sleep(1)
             
-        positions = mt5.positions_get(symbol=args.symbol)
-        so_lenh = len(positions) if positions else 0
-        r.set(REDIS_POS_KEY, so_lenh)
-        
-        acc_info = mt5.account_info()
-        if acc_info:
-            r.set(REDIS_EQUITY_KEY, acc_info.equity)
+        # 🧮 CẬP NHẬT TÀI KHOẢN
+        if now - thoi_gian_check_tk_cuoi > 0.2:
+            positions = mt5.positions_get(symbol=args.symbol)
+            so_lenh = len(positions) if positions else 0
+            r.set(REDIS_POS_KEY, so_lenh)
+            
+            acc_info = mt5.account_info()
+            if acc_info:
+                r.set(REDIS_EQUITY_KEY, acc_info.equity)
+                
+                if acc_info.equity < alert_equity and not equity_canh_bao_da_gui:
+                    msg = f"⚠️ <b>[{args.broker}] CẢNH BÁO LOW EQUITY</b>\nTài khoản đang có {acc_info.equity:.2f}$, chạm mức cảnh báo ({alert_equity}$). Vui lòng nạp thêm tiền!"
+                    r.lpush(QUEUE_TELEGRAM, msg)
+                    print(f"\n{msg}")
+                    equity_canh_bao_da_gui = True
+                
+                elif acc_info.equity > alert_equity + 10:
+                    equity_canh_bao_da_gui = False
+                    
+            thoi_gian_check_tk_cuoi = now
 
         time.sleep(0.001)
 

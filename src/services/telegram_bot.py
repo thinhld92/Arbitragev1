@@ -4,6 +4,7 @@ import json
 import time
 import sys
 import os
+import datetime
 
 # Lùi 1 bước từ 'services' ra 'src' để Python nhìn thấy thư mục 'utils'
 thu_muc_src = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -14,7 +15,7 @@ from utils.terminal import dan_tran_cua_so
 os.system("title 📨 TELEGRAM SERVICE")
 dan_tran_cua_so(1) # Telegram nằm tầng 1 (trên cùng)
 
-print("📨 Khởi động Dịch vụ Telegram...")
+print("📨 Khởi động Dịch vụ Telegram (Phiên bản Chống Spam Toàn Diện)...")
 
 # ==========================================
 # 1. ĐỌC CẤU HÌNH
@@ -45,7 +46,7 @@ if not is_enabled or not bot_token or not chat_id:
 r = redis.Redis(host=redis_conf['host'], port=redis_conf['port'], db=redis_conf['db'], decode_responses=True)
 QUEUE_TELEGRAM = "TELEGRAM_QUEUE"
 
-print("✅ Đã kết nối Redis! Đang chờ tin nhắn...")
+print("✅ Đã kết nối Redis! Đang chờ thông báo lỗi...")
 
 # ==========================================
 # 2. HÀM GỬI TIN NHẮN API
@@ -65,18 +66,79 @@ def send_telegram_message(text):
         print(f"❌ Lỗi kết nối mạng khi gửi Telegram: {e}")
 
 # ==========================================
-# 3. VÒNG LẶP CHỜ TIN NHẮN (BLPOP)
+# 3. VÒNG LẶP CHỜ TIN NHẮN (THROTTLE + ANTI-SPAM)
 # ==========================================
+so_lan_gui = 0
+thoi_gian_gui_cuoi = 0
+
 try:
     while True:
-        # Lấy tin nhắn (Sẽ đứng im chờ ở đây nếu hàng đợi rỗng, KHÔNG tốn CPU)
-        queue_name, message = r.blpop(QUEUE_TELEGRAM, timeout=0)
+        # 1. Chờ lấy lỗi đầu tiên (Sẽ đứng im ở đây nếu không có lỗi, KHÔNG tốn CPU)
+        queue_name, first_msg = r.blpop(QUEUE_TELEGRAM, timeout=0)
         
-        print(f"Đang gửi tin: {message.replace('<br>', '').replace('<b>', '').replace('</b>', '')[:50]}...")
-        send_telegram_message(message)
+        now = time.time()
         
-        # Giãn cách xíu để không bị Telegram khóa vì spam quá nhanh (Giới hạn: ~30 tin/giây)
-        time.sleep(0.1) 
+        # 2. Reset bộ đếm nếu hệ thống đã yên ắng được 2 phút (120 giây)
+        if thoi_gian_gui_cuoi > 0 and (now - thoi_gian_gui_cuoi > 120):
+            so_lan_gui = 0
+            print("\n🔄 Hệ thống đã yên ắng hơn 2 phút, reset bộ đếm Telegram về 0.")
+            
+        # 3. Xác định thời gian giãn cách (Cooldown)
+        if so_lan_gui < 3:
+            cooldown = 10 # 3 lần đầu: Nghỉ 10 giây
+        else:
+            cooldown = 120 # Từ lần thứ 4 trở đi: Nghỉ 120 giây
+            
+        thoi_gian_da_troi_qua = now - thoi_gian_gui_cuoi
+        
+        # 4. Nếu lỗi đến quá nhanh, cho Bot ngủ chờ đủ thời gian Cooldown
+        if so_lan_gui > 0 and thoi_gian_da_troi_qua < cooldown:
+            thoi_gian_cho = cooldown - thoi_gian_da_troi_qua
+            print(f"⏳ Bot đang chặn Spam: Tạm chờ {thoi_gian_cho:.1f}s nữa mới xử lý tiếp...")
+            time.sleep(thoi_gian_cho)
+            
+        # 5. Ngủ xong, Vét cạn hàng đợi (Gom hết các lỗi bị dồn lại trên Redis trong lúc ngủ)
+        danh_sach_tin = [first_msg]
+        while True:
+            extra_msg = r.lpop(QUEUE_TELEGRAM)
+            if extra_msg:
+                # Lọc sơ bộ: Nếu lỗi này giống y hệt lỗi trước thì KHÔNG gom thêm vào cho đỡ dài
+                if extra_msg not in danh_sach_tin:
+                    danh_sach_tin.append(extra_msg)
+                
+                # Tránh gom quá nhiều làm tin nhắn quá dài (Telegram cấm gửi > 4096 ký tự)
+                if len(danh_sach_tin) >= 10:
+                    break
+            else:
+                break
+                
+        # 6. Đóng gói nội dung
+        if len(danh_sach_tin) == 1:
+            final_text = danh_sach_tin[0]
+        else:
+            final_text = f"📦 <b>[GOM {len(danh_sach_tin)} CẢNH BÁO CÙNG LÚC]</b>\n\n" + "\n➖➖➖➖\n".join(danh_sach_tin)
+            
+        # ==========================================
+        # 🪄 THÊM GIA VỊ ĐỂ LÁCH LUẬT ANTI-SPAM
+        # ==========================================
+        # Tạo chuỗi thời gian hiện tại
+        thoi_gian_thuc = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        # Tạo một ID ngẫu nhiên nhỏ từ thời gian thực
+        ma_bam = f"#{so_lan_gui + 1}_{int(time.time() * 1000) % 10000}" 
+        
+        # Đóng mộc vào cuối tin nhắn
+        final_text += f"\n\n🕒 <i>{thoi_gian_thuc} | MsgID: {ma_bam}</i>"
+        # ==========================================
+
+        # Hiển thị log ra màn hình Terminal
+        trich_doan = first_msg.replace('<br>', '').replace('<b>', '').replace('</b>', '')[:40]
+        print(f"🚀 Đang gửi báo cáo Lần {so_lan_gui + 1} (Gom {len(danh_sach_tin)} tin): {trich_doan}...")
+        
+        send_telegram_message(final_text)
+        
+        # 7. Cập nhật lại thời gian và số lần gửi
+        so_lan_gui += 1
+        thoi_gian_gui_cuoi = time.time()
         
 except KeyboardInterrupt:
     print("\n🛑 Đã tắt Dịch vụ Telegram an toàn.")
