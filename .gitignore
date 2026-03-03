@@ -10,6 +10,7 @@ env/
 
 # Python Cache
 __pycache__/
+src/utils/__pycache__/
 *.py[cod]
 *$py.class
 

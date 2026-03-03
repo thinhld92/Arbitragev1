@@ -157,7 +157,7 @@ try:
                     cooldown_close_sec = cap_hien_tai.get('cooldown_close_second', 2)
                     hold_time_sec = cap_hien_tai.get('hold_time', 180)
                     stable_time_sec = cap_hien_tai['stable_time'] / 1000.0
-                    max_tick_delay = cap_hien_tai.get('max_tick_delay', 3.0)
+                    max_tick_delay = cap_hien_tai.get('max_tick_delay', 5.0)
                 last_config_modified = current_modified
                 
                 vol_b = cap_hien_tai.get('volume_base', 0.01) 
@@ -276,7 +276,7 @@ try:
             if tre_base > max_tick_delay: san_bi_tre.append(cap_hien_tai['base_exchange'])
             if tre_diff > max_tick_delay: san_bi_tre.append(cap_hien_tai['diff_exchange'])
             
-            print(f"⚠️ [ĐÓNG BĂNG] Sàn {', '.join(san_bi_tre)} quá {max_tick_delay}s ko có giá mới! -> KHÓA NÒNG!      ", end='\r')
+            print(f"⚠️ [ĐÓNG BĂNG] Sàn {', '.join(san_bi_tre)} quá {max_tick_delay}s k có giá mới! -> Hoãn {stable_time_sec*1000:.0f}ms!      ", end='\r')
             da_xu_ly_vao_lenh_cho_tick_nay = True 
             continue
 
