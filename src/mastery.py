@@ -295,7 +295,7 @@ try:
             # --- TỘI 2: LỆNH LẠ MẶT (Lỗi vào xịt 1 bên, dư lệnh mồ côi, rớt cắt) ---
             if len(unpaired_base) > 0 or len(unpaired_diff) > 0:
                 for ub in unpaired_base:
-                    msg = f"🚨 [MỒ CÔI] Lệnh lạ mặt Base #{ub['ticket']}! Trảm!"
+                    msg = f"🚨 [MỒ CÔI {args.pair_id}] Lệnh lạ mặt Base #{ub['ticket']}! Trảm!"
                     print(msg)
                     r.lpush(f"QUEUE:ORDER:{cap_hien_tai['base_exchange'].upper()}", json.dumps({"action": "CLOSE_BY_TICKET", "ticket": ub['ticket']}))
                     co_lenh_bi_tram = True
@@ -303,7 +303,7 @@ try:
                         r.lpush("TELEGRAM_QUEUE", f"🔪 <b>AUTO-CUT (ORPHAN)</b>\n{msg}")
                         
                 for ud in unpaired_diff:
-                    msg = f"🚨 [MỒ CÔI] Lệnh lạ mặt Diff #{ud['ticket']}! Trảm!"
+                    msg = f"🚨 [MỒ CÔI {args.pair_id}] Lệnh lạ mặt Diff #{ud['ticket']}! Trảm!"
                     print(msg)
                     r.lpush(f"QUEUE:ORDER:{cap_hien_tai['diff_exchange'].upper()}", json.dumps({"action": "CLOSE_BY_TICKET", "ticket": ud['ticket']}))
                     co_lenh_bi_tram = True
