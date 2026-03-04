@@ -52,7 +52,8 @@
       "trading_hours": [
         "00:00-00:30",  
         "07:00-24:00"   
-      ]
+      ],
+      "force_close_hours": ["23:55-00:05"]
     }
   ],
   "telegram": {

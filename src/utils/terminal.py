@@ -1,5 +1,6 @@
 import ctypes
 import json
+# import ujson as json
 
 def dan_tran_cua_so(vi_tri_hang):
     """

@@ -1,6 +1,7 @@
 import MetaTrader5 as mt5
 import redis
-import json
+# import json
+import ujson as json
 import time
 import argparse
 import os
@@ -94,6 +95,24 @@ else:
 
 print(f"✅ [{args.broker}] Kết nối thành công! Cấu hình Filling Mode: {ten_filling}")
 
+# -----------------------------------------------------
+# 🛡️ KIỂM TRA QUYỀN GIAO DỊCH TÀI KHOẢN (Check 1 lần)
+# -----------------------------------------------------
+acc_info = mt5.account_info()
+if acc_info is not None:
+    if not acc_info.trade_allowed:
+        print(f"❌ [{args.broker}] LỖI: Tài khoản không được phép trade (Đang dùng Pass View?)")
+        mt5.shutdown()
+        quit()
+    if not acc_info.trade_expert:
+        print(f"❌ [{args.broker}] LỖI: Sàn chặn không cho phép dùng Bot (Algo Trading) trên tài khoản này!")
+        mt5.shutdown()
+        quit()
+else:
+    print(f"❌ [{args.broker}] Không lấy được thông tin tài khoản. Vui lòng kiểm tra lại đăng nhập!")
+    mt5.shutdown()
+    quit()
+
 # ==========================================
 # HÀM HỖ TRỢ: ĐÓNG 1 LỆNH (DÙNG CHO THREAD)
 # ==========================================
@@ -172,6 +191,17 @@ def thuc_thi_chi_thi(chi_thi, current_tick):
             for pos in lenh_can_dong:
                 threading.Thread(target=thuc_thi_dong_1_lenh, args=(pos, current_tick, comment)).start()
 
+    # 👉 THÊM CHIÊU CHÉM ĐÍCH DANH VÀO DƯỚI CÙNG HÀM thuc_thi_chi_thi
+    elif action == "CLOSE_BY_TICKET":
+        ticket_can_dong = chi_thi.get("ticket")
+        # Gọi MT5 tìm đúng cái lệnh có Ticket đó
+        positions = mt5.positions_get(ticket=ticket_can_dong) 
+        if positions:
+            # Tìm thấy thì ném cho Thread phụ đi chém
+            threading.Thread(target=thuc_thi_dong_1_lenh, args=(positions[0], current_tick, comment)).start()
+        else:
+            print(f"⚠️ [SỔ CÁI] Lệnh tử hình Ticket #{ticket_can_dong} thất bại do không tìm thấy lệnh trên sàn (Đã bị StopOut trước đó?)")
+
 # ==========================================
 # 3. VÒNG LẶP CHIẾN TRANH (MAIN LOOP)
 # ==========================================
@@ -186,15 +216,19 @@ try:
     while True:
         now = time.time()
         
-        # 🛡️ KIỂM TRA MẠNG
+        # 🛡️ KIỂM TRA MẠNG VÀ NÚT ALGO TRADING
         if now - thoi_gian_check_mang_cuoi > 1.0:
             terminal_info = mt5.terminal_info()
-            dang_co_mang = terminal_info.connected if terminal_info else False
+            # Có mạng VÀ phải đang bật nút Algo Trading thì mới tính là OK
+            dang_co_mang = terminal_info.connected and terminal_info.trade_allowed if terminal_info else False
             thoi_gian_check_mang_cuoi = now
             
             if terminal_info is None:
                 print(f"⚠️ [{args.broker}] Mất kết nối nội bộ! Đang thử khởi tạo lại...")
                 mt5.initialize(path=mt5_path, portable=True, timeout=10000)
+            elif not terminal_info.trade_allowed:
+                # Nếu lỡ quên bật, in cảnh báo đỏ rực trên màn hình Worker
+                print(f"⛔ [{args.broker}] ĐẠI CA QUÊN BẬT NÚT 'ALGO TRADING' TRÊN MT5! Bot đang khóa nòng...", end='\r')
 
         # 📈 LẤY GIÁ VÀ CẬP NHẬT TICK
         tick = mt5.symbol_info_tick(args.symbol)
@@ -224,11 +258,17 @@ try:
             mt5.symbol_select(args.symbol, True)
             time.sleep(1)
             
-        # 🧮 CẬP NHẬT TÀI KHOẢN
+        # 🧮 CẬP NHẬT TÀI KHOẢN VÀ DANH SÁCH TICKET
         if now - thoi_gian_check_tk_cuoi > 0.2:
             positions = mt5.positions_get(symbol=args.symbol)
-            so_lenh = len(positions) if positions else 0
-            r.set(REDIS_POS_KEY, so_lenh)
+            if positions:
+                # Trích xuất ticket và thời gian tạo lệnh thành mảng JSON
+                danh_sach_ticket = [{"ticket": pos.ticket, "time_msc": pos.time_msc} for pos in positions]
+            else:
+                danh_sach_ticket = []
+            
+            # Đẩy nguyên mảng JSON lên Redis thay vì 1 con số
+            r.set(REDIS_POS_KEY, json.dumps(danh_sach_ticket))
             
             acc_info = mt5.account_info()
             if acc_info:
