@@ -5,7 +5,7 @@ import time
 import argparse
 import logging
 from logging.handlers import RotatingFileHandler
-from datetime import datetime
+from datetime import datetime, timezone
 
 # Import Quân Sư
 from utils.trading_logic import check_tin_hieu_arbitrage 
@@ -87,26 +87,24 @@ def luu_tri_nho():
     }
     r.set(key_state, json.dumps(state))
 
-def kiem_tra_gio_giao_dich(trading_hours):
+def kiem_tra_gio_giao_dich(trading_hours, current_time_str):
     if not trading_hours: return True 
-    current_time = datetime.now().strftime("%H:%M")
     for khung_gio in trading_hours:
         start, end = khung_gio.split('-')
         if start <= end:
-            if start <= current_time <= end: return True
+            if start <= current_time_str <= end: return True
         else: 
-            if current_time >= start or current_time <= end: return True
+            if current_time_str >= start or current_time_str <= end: return True
     return False
 
-def kiem_tra_gio_cam(blackout_hours):
+def kiem_tra_gio_cam(blackout_hours, current_time_str):
     if not blackout_hours: return False 
-    current_time = datetime.now().strftime("%H:%M")
     for khung_gio in blackout_hours:
         start, end = khung_gio.split('-')
         if start <= end:
-            if start <= current_time <= end: return True
-        else: # Vắt qua đêm (VD: 23:55-00:05)
-            if current_time >= start or current_time <= end: return True
+            if start <= current_time_str <= end: return True
+        else: # Vắt qua đêm
+            if current_time_str >= start or current_time_str <= end: return True
     return False
 
 # ==========================================
@@ -135,12 +133,22 @@ thoi_diem_spam_tram_cuoi = 0
 
 print(f"🚀 MASTER {args.pair_id} SẴN SÀNG CHIẾN ĐẤU (SELF-HEALING + BLACKOUT GUILLOTINE)!")
 
+# --- Cache Đồng Hồ ---
+last_time_update = 0
+current_utc_time_str = "00:00"
+
 # ==========================================
 # 3. VÒNG LẶP SUY NGHĨ CỦA MASTER
 # ==========================================
 try:
     while True:
         time.sleep(0.001)
+        now_sec = time.time() # time.time() cực kỳ nhẹ, không tốn CPU
+        
+        # ⚡ ĐỒNG HỒ CACHE: Cứ đúng 1 giây mới format chuỗi giờ UTC 1 lần
+        if now_sec - last_time_update >= 1.0:
+            current_utc_time_str = datetime.now(timezone.utc).strftime("%H:%M")
+            last_time_update = now_sec
 
         # ========================================================
         # 👑 1. HOT RELOAD & CHECK GIỜ
@@ -172,7 +180,7 @@ try:
                 pass
 
         # ⚡ Kiểm tra xem có đang bị vướng vào "Giờ Tử Thần" không?
-        trong_gio_cam = kiem_tra_gio_cam(cap_hien_tai.get('force_close_hours', []))
+        trong_gio_cam = kiem_tra_gio_cam(cap_hien_tai.get('force_close_hours', []), current_utc_time_str)
 
         # ========================================================
         # 🛡️ 2. CHECK WORKER ALIVE & DỊCH JSON SỔ SÁCH 
@@ -436,7 +444,7 @@ try:
                 print(f"🛑 [LOW EQUITY] KHÓA MỞ LỆNH MỚI! Base {equity_base:.2f}$ | Diff {equity_diff:.2f}$", end='\r')
                 continue 
             
-            if not kiem_tra_gio_giao_dich(cap_hien_tai.get('trading_hours', [])): continue
+            if not kiem_tra_gio_giao_dich(cap_hien_tai.get('trading_hours', []), current_utc_time_str): continue
 
             loai_lenh_moi = tin_hieu["loai_lenh"] 
             dang_dao_chieu_lien_thanh = (time.time() - thoi_diem_vua_ra_lenh_dong) < 2.0

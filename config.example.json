@@ -1,19 +1,19 @@
 {
   "redis": {
-    "_ghichu": "Cấu hình Redis không cần sửa đổi",
+    "_ghichu": "Cấu hình Redis không cần sửa đổi (Mặc định chạy Memurai local)",
     "host": "localhost",
     "port": 6379,
     "db": 0
   },
   "terminal_ui": {
-    "_ghichu": "Cấu hình giao diện terminal",
+    "_ghichu": "Cấu hình kích thước và vị trí tự động xếp giao diện terminal",
     "width": 600,
     "height": 200,
     "offset_x": 10,
     "offset_y": 0
   },
   "brokers": {
-    "_ghichu": "Cấu hình tên sàn và đường dẫn đến MT5 log tài khoản sàn đó",
+    "_ghichu": "Cấu hình tên sàn và đường dẫn đến MT5 terminal của tài khoản sàn đó",
     "TICKMILL": {
       "path": "C:\\Program Files\\Tickmill MT5 Terminal\\terminal64.exe"
     },
@@ -23,10 +23,12 @@
   },
   "_giai_thich_tham_so": {
     "max_tick_delay": "thời gian tối đa 1 tick, phòng sàn treo, rớt mạng, giá không chạy",
-    "cooldown_second": "thời gian chờ giữa các lệnh mở, để tránh xét HFT",
-    "cooldown_close_second": "thời gian chờ giữa các lệnh đóng, để tránh xét HFT",
-    "hold_time": "thời gian giữ lệnh tối thiểu",
-    "alert_equity": "cảnh báo khi số dư tài khoản giảm xuống dưới mức này"
+    "cooldown_second": "thời gian chờ giữa các lệnh mở, để tránh sàn xét lỗi HFT",
+    "cooldown_close_second": "thời gian chờ giữa các lệnh đóng, để tránh sàn xét lỗi HFT",
+    "hold_time": "thời gian giữ lệnh tối thiểu (giây)",
+    "alert_equity": "cảnh báo khi số dư giảm xuống dưới mức này -> Tự động KHÓA vào lệnh mới",
+    "stable_time": "thời gian băng giá (tính bằng mili-giây) trước khi bóp cò, vd 300 = 0.3 giây",
+    "deviation_entry": "mức chênh lệch để VÀO lệnh (vd 0.20 giá)"
   },
   "danh_sach_cap": [
     {
@@ -51,14 +53,14 @@
       "alert_equity": 100,
       "trading_hours": [
         "00:00-00:30",  
-        "07:00-24:00"   
+        "07:00-23:59"   
       ],
       "force_close_hours": ["23:55-00:05"]
     }
   ],
   "telegram": {
     "enable": true,
-    "bot_token": "8343662904:AAGkgys-qK0mbuaGIjSB0GMZc_BDHudNFTA",
-    "chat_id": "-1003645645536"
+    "bot_token": "TOKEN_CUA_BAN_DIEN_VAO_DAY",
+    "chat_id": "-100XXXXXXXXX"
   }
 }
