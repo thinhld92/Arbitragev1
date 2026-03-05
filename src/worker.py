@@ -1,6 +1,5 @@
 import MetaTrader5 as mt5
 import redis
-# import json
 import ujson as json
 import time
 import argparse
@@ -39,6 +38,10 @@ try:
                    (cap['diff_exchange'] == args.broker and cap['diff_symbol'] == args.symbol)), None)
     
     alert_equity = cap_cfg.get('alert_equity', 0) if cap_cfg else 0
+    
+    # 🌟 LẤY TÊN VPS VÀ GẮN BIỂN SỐ CHO WORKER
+    vps_name = config.get('vps_name', 'LOCAL') 
+    bot_name = f"[{vps_name} | {args.broker} | {args.symbol}]"
 
 except KeyError:
     print(f"❌ Lỗi: Không tìm thấy cấu hình cho sàn {args.broker} trong config.json")
@@ -58,10 +61,10 @@ mt5_lock = threading.Lock()
 # ==========================================
 # KHỞI TẠO KẾT NỐI MT5
 # ==========================================
-print(f"🚀 [{args.broker}] Đang kết nối tới MT5 tại: {mt5_path}")
+print(f"🚀 {bot_name} Đang kết nối tới MT5 tại: {mt5_path}")
 
 if not mt5.initialize(path=mt5_path, portable=True, timeout=60000):
-    print(f"❌ [{args.broker}] Khởi tạo MT5 thất bại! Mã lỗi: {mt5.last_error()}")
+    print(f"❌ {bot_name} Khởi tạo MT5 thất bại! Mã lỗi: {mt5.last_error()}")
     quit()
 
 # ==========================================
@@ -71,7 +74,7 @@ mt5.symbol_select(args.symbol, True)
 symbol_info = mt5.symbol_info(args.symbol)
 
 if symbol_info is None:
-    print(f"❌ [{args.broker}] Không tìm thấy mã {args.symbol} trên sàn. Vui lòng kiểm tra lại!")
+    print(f"❌ {bot_name} Không tìm thấy mã {args.symbol} trên sàn. Vui lòng kiểm tra lại!")
     mt5.shutdown()
     quit()
 
@@ -93,7 +96,7 @@ else:
     CACHED_FILLING_MODE = mt5.ORDER_FILLING_RETURN
     ten_filling = "RETURN"
 
-print(f"✅ [{args.broker}] Kết nối thành công! Cấu hình Filling Mode: {ten_filling}")
+print(f"✅ {bot_name} Kết nối thành công! Cấu hình Filling Mode: {ten_filling}")
 
 # -----------------------------------------------------
 # 🛡️ KIỂM TRA QUYỀN GIAO DỊCH TÀI KHOẢN (Check 1 lần)
@@ -101,15 +104,15 @@ print(f"✅ [{args.broker}] Kết nối thành công! Cấu hình Filling Mode: 
 acc_info = mt5.account_info()
 if acc_info is not None:
     if not acc_info.trade_allowed:
-        print(f"❌ [{args.broker}] LỖI: Tài khoản không được phép trade (Đang dùng Pass View?)")
+        print(f"❌ {bot_name} LỖI: Tài khoản không được phép trade (Đang dùng Pass View?)")
         mt5.shutdown()
         quit()
     if not acc_info.trade_expert:
-        print(f"❌ [{args.broker}] LỖI: Sàn chặn không cho phép dùng Bot (Algo Trading) trên tài khoản này!")
+        print(f"❌ {bot_name} LỖI: Sàn chặn không cho phép dùng Bot (Algo Trading) trên tài khoản này!")
         mt5.shutdown()
         quit()
 else:
-    print(f"❌ [{args.broker}] Không lấy được thông tin tài khoản. Vui lòng kiểm tra lại đăng nhập!")
+    print(f"❌ {bot_name} Không lấy được thông tin tài khoản. Vui lòng kiểm tra lại đăng nhập!")
     mt5.shutdown()
     quit()
 
@@ -139,10 +142,10 @@ def thuc_thi_dong_1_lenh(pos, current_tick, comment):
         result = mt5.order_send(request)
         
     if result.retcode == mt5.TRADE_RETCODE_DONE:
-        print(f"💰 [{args.broker}] ĐÃ ĐÓNG LỆNH #{pos.ticket} THÀNH CÔNG.")
+        print(f"💰 {bot_name} ĐÃ ĐÓNG LỆNH #{pos.ticket} THÀNH CÔNG.")
     else:
-        print(f"❌ [{args.broker}] LỖI ĐÓNG LỆNH #{pos.ticket}: {result.comment}")
-        r.lpush(QUEUE_TELEGRAM, f"❌ <b>[{args.broker}] LỖI ĐÓNG LỆNH</b>\nTicket: #{pos.ticket} | Lỗi: {result.comment}")
+        print(f"❌ {bot_name} LỖI ĐÓNG LỆNH #{pos.ticket}: {result.comment}")
+        r.lpush(QUEUE_TELEGRAM, f"❌ <b>{bot_name} LỖI ĐÓNG LỆNH</b>\nTicket: #{pos.ticket} | Lỗi: {result.comment}")
 
 # ==========================================
 # HÀM BÓP CÒ CHÍNH (PHÂN LOẠI LỆNH)
@@ -175,10 +178,10 @@ def thuc_thi_chi_thi(chi_thi, current_tick):
             result = mt5.order_send(request)
             
         if result.retcode == mt5.TRADE_RETCODE_DONE:
-            print(f"🔫 [{args.broker}] ĐÃ BẮN {action} {volume} LOT. Ticket: {result.order}")
+            print(f"🔫 {bot_name} ĐÃ BẮN {action} {volume} LOT. Ticket: {result.order}")
         else:
-            print(f"❌ [{args.broker}] LỖI VÀO LỆNH {action}: {result.comment} ({result.retcode})")
-            r.lpush(QUEUE_TELEGRAM, f"❌ <b>[{args.broker}] LỖI {action}</b>\nMã lỗi: {result.retcode} - {result.comment}")
+            print(f"❌ {bot_name} LỖI VÀO LỆNH {action}: {result.comment} ({result.retcode})")
+            r.lpush(QUEUE_TELEGRAM, f"❌ <b>{bot_name} LỖI {action}</b>\nMã lỗi: {result.retcode} - {result.comment}")
 
     elif action == "CLOSE_OLDEST":
         count = chi_thi.get("count", 1)
@@ -200,7 +203,7 @@ def thuc_thi_chi_thi(chi_thi, current_tick):
             # Tìm thấy thì ném cho Thread phụ đi chém
             threading.Thread(target=thuc_thi_dong_1_lenh, args=(positions[0], current_tick, comment)).start()
         else:
-            print(f"⚠️ [SỔ CÁI] Lệnh tử hình Ticket #{ticket_can_dong} thất bại do không tìm thấy lệnh trên sàn (Đã bị StopOut trước đó?)")
+            print(f"⚠️ {bot_name} Lệnh tử hình Ticket #{ticket_can_dong} thất bại do không tìm thấy lệnh trên sàn (Đã bị StopOut trước đó?)")
 
 # ==========================================
 # 3. VÒNG LẶP CHIẾN TRANH (MAIN LOOP)
@@ -224,11 +227,11 @@ try:
             thoi_gian_check_mang_cuoi = now
             
             if terminal_info is None:
-                print(f"⚠️ [{args.broker}] Mất kết nối nội bộ! Đang thử khởi tạo lại...")
+                print(f"⚠️ {bot_name} Mất kết nối nội bộ! Đang thử khởi tạo lại...")
                 mt5.initialize(path=mt5_path, portable=True, timeout=10000)
             elif not terminal_info.trade_allowed:
                 # Nếu lỡ quên bật, in cảnh báo đỏ rực trên màn hình Worker
-                print(f"⛔ [{args.broker}] ĐẠI CA QUÊN BẬT NÚT 'ALGO TRADING' TRÊN MT5! Bot đang khóa nòng...", end='\r')
+                print(f"⛔ {bot_name} ĐẠI CA QUÊN BẬT NÚT 'ALGO TRADING' TRÊN MT5! Bot đang khóa nòng...", end='\r')
 
         # 📈 LẤY GIÁ VÀ CẬP NHẬT TICK
         tick = mt5.symbol_info_tick(args.symbol)
@@ -244,14 +247,14 @@ try:
                 r.set(REDIS_TICK_KEY, json.dumps(tick_data))
                 
                 trang_thai_mang = "OK" if dang_co_mang else "RỚT"
-                print(f"[{args.broker}] BID: {tick.bid} | ASK: {tick.ask} | Mạng: {trang_thai_mang}  ", end='\r')
+                print(f"{bot_name} BID: {tick.bid} | ASK: {tick.ask} | Mạng: {trang_thai_mang}   ", end='\r')
                 
                 last_tick_time = tick.time_msc
                 
             thu_tu_master = r.rpop(QUEUE_ORDER_KEY)
             if thu_tu_master:
                 chi_thi = json.loads(thu_tu_master)
-                print(f"\n📨 [{args.broker}] Nhận lệnh từ Master: {chi_thi}")
+                print(f"\n📨 {bot_name} Nhận lệnh từ Master: {chi_thi}")
                 threading.Thread(target=thuc_thi_chi_thi, args=(chi_thi, tick)).start()
                 
         else:
@@ -275,7 +278,7 @@ try:
                 r.set(REDIS_EQUITY_KEY, acc_info.equity)
                 
                 if acc_info.equity < alert_equity and not equity_canh_bao_da_gui:
-                    msg = f"⚠️ <b>[{args.broker}] CẢNH BÁO LOW EQUITY</b>\nTài khoản đang có {acc_info.equity:.2f}$, chạm mức cảnh báo ({alert_equity}$). Vui lòng nạp thêm tiền!"
+                    msg = f"⚠️ <b>{bot_name} CẢNH BÁO LOW EQUITY</b>\nTài khoản đang có {acc_info.equity:.2f}$, chạm mức cảnh báo ({alert_equity}$). Vui lòng nạp thêm tiền!"
                     r.lpush(QUEUE_TELEGRAM, msg)
                     print(f"\n{msg}")
                     equity_canh_bao_da_gui = True
@@ -288,5 +291,5 @@ try:
         time.sleep(0.001)
 
 except KeyboardInterrupt:
-    print(f"\n🛑 [{args.broker}] Đã dừng an toàn.")
+    print(f"\n🛑 {bot_name} Đã dừng an toàn.")
     mt5.shutdown()

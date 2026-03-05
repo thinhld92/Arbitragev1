@@ -30,11 +30,13 @@
     "stable_time": "thời gian băng giá (tính bằng mili-giây) trước khi bóp cò, vd 300 = 0.3 giây",
     "deviation_entry": "mức chênh lệch để VÀO lệnh (vd 0.20 giá)",
     "max_orphan_count": "Số lần vào lệnh hụt (mồ côi) LIÊN TIẾP tối đa trước khi sập cầu dao",
-    "orphan_cooldown_second": "Thời gian khóa không cho vào lệnh mới khi sập cầu dao (giây)"
+    "orphan_cooldown_second": "Thời gian khóa không cho vào lệnh mới khi sập cầu dao (giây)",
+    "stable_mode": "Chọn 'freeze' (đợi giá đứng im) hoặc 'continuous' (giá giật thoải mái nhưng độ lệch phải duy trì liên tục)"
   },
   "danh_sach_cap": [
     {
       "id": "XAUUSD_TICKMILL_EXNESS",
+      "stable_mode": "freeze",
       "standard_name": "XAUUSD", 
       "base_exchange": "TICKMILL",
       "base_symbol": "XAUUSD",  
@@ -59,6 +61,7 @@
       "orphan_cooldown_second": 1800
     }
   ],
+  "vps_name": "local",
   "telegram": {
     "enable": true,
     "bot_token": "TOKEN_CUA_BAN_DIEN_VAO_DAY",
