@@ -28,7 +28,9 @@
     "hold_time": "thời gian giữ lệnh tối thiểu (giây)",
     "alert_equity": "cảnh báo khi số dư giảm xuống dưới mức này -> Tự động KHÓA vào lệnh mới",
     "stable_time": "thời gian băng giá (tính bằng mili-giây) trước khi bóp cò, vd 300 = 0.3 giây",
-    "deviation_entry": "mức chênh lệch để VÀO lệnh (vd 0.20 giá)"
+    "deviation_entry": "mức chênh lệch để VÀO lệnh (vd 0.20 giá)",
+    "max_orphan_count": "Số lần vào lệnh hụt (mồ côi) LIÊN TIẾP tối đa trước khi sập cầu dao",
+    "orphan_cooldown_second": "Thời gian khóa không cho vào lệnh mới khi sập cầu dao (giây)"
   },
   "danh_sach_cap": [
     {
@@ -51,11 +53,10 @@
       "comment_entry": "",
       "comment_close": "",
       "alert_equity": 100,
-      "trading_hours": [
-        "00:00-00:30",  
-        "07:00-23:59"   
-      ],
-      "force_close_hours": ["23:55-00:05"]
+      "trading_hours": ["00:05-12:00", "16:10-19:30"],
+      "force_close_hours": ["20:00-20:05"],
+      "max_orphan_count": 3,
+      "orphan_cooldown_second": 1800
     }
   ],
   "telegram": {

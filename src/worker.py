@@ -244,7 +244,7 @@ try:
                 r.set(REDIS_TICK_KEY, json.dumps(tick_data))
                 
                 trang_thai_mang = "OK" if dang_co_mang else "RỚT"
-                print(f"[{args.broker}] BID: {tick.bid} | ASK: {tick.ask} | Mạng: {trang_thai_mang}", end='\r')
+                print(f"[{args.broker}] BID: {tick.bid} | ASK: {tick.ask} | Mạng: {trang_thai_mang}  ", end='\r')
                 
                 last_tick_time = tick.time_msc
                 
