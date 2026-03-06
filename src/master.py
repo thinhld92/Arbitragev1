@@ -28,9 +28,6 @@ parser = argparse.ArgumentParser()
 parser.add_argument("--pair_id", required=True)
 args = parser.parse_args()
 
-os.system(f"title 🧠 MASTER BRAIN - {args.pair_id}")
-dan_tran_cua_so(4)
-
 log_dir = "logs"
 os.makedirs(log_dir, exist_ok=True)
 log_filename = os.path.join(log_dir, f"log_master_{args.pair_id}.txt")
@@ -42,6 +39,14 @@ logging.info(f"=== KHỞI ĐỘNG MASTER BRAIN {args.pair_id} ===")
 
 with open(CONFIG_FILE, 'r', encoding='utf-8') as f:
     config = json.load(f)
+
+# 🌟 LẤY TÊN VPS VÀ TẠO BIỂN TÊN CHO MASTER
+vps_name = config.get('vps_name', 'LOCAL')
+master_name = f"[{vps_name} | {args.pair_id}]"
+
+# 👑 DÙNG WINDOWS API ĐỂ ĐỔI TÊN TERMINAL CHUẨN 100%
+ctypes.windll.kernel32.SetConsoleTitleW(f"🧠 MASTER {master_name}")
+dan_tran_cua_so(4)
 
 redis_conf = config['redis']
 r = redis.Redis(
@@ -327,14 +332,14 @@ try:
                         r.lpush(f"QUEUE:ORDER:{cap_hien_tai['base_exchange'].upper()}", json.dumps({"action": "CLOSE_BY_TICKET", "ticket": cap['base_ticket']}))
                         co_lenh_bi_tram = True
                         if time.time() - thoi_diem_spam_tram_cuoi > 60:
-                            r.lpush("TELEGRAM_QUEUE", f"🔪 <b>AUTO-CUT (STOPOUT)</b>\n{msg}")
+                            r.lpush("TELEGRAM_QUEUE", f"🔪 <b>{master_name} - AUTO-CUT (STOPOUT)</b>\n{msg}")
                     elif not base_alive and diff_alive:
                         msg = f"🚨 [Lệnh FA] Cặp {cap['id_cap']} khuyết Base. Trảm Diff #{cap['diff_ticket']}!"
                         print(msg)
                         r.lpush(f"QUEUE:ORDER:{cap_hien_tai['diff_exchange'].upper()}", json.dumps({"action": "CLOSE_BY_TICKET", "ticket": cap['diff_ticket']}))
                         co_lenh_bi_tram = True
                         if time.time() - thoi_diem_spam_tram_cuoi > 60:
-                            r.lpush("TELEGRAM_QUEUE", f"🔪 <b>AUTO-CUT (STOPOUT)</b>\n{msg}")
+                            r.lpush("TELEGRAM_QUEUE", f"🔪 <b>{master_name} - AUTO-CUT (STOPOUT)</b>\n{msg}")
                         
                 if len(cac_cap_con_song) != len(lich_su_vao_lenh):
                     lich_su_vao_lenh = cac_cap_con_song # Xóa sổ vĩnh viễn cặp khuyết
@@ -348,7 +353,7 @@ try:
                     # NẾU ĐẠT LIMIT (Ví dụ 3 lần liên tiếp) -> SẬP CẦU DAO
                     if dem_so_lan_mo_coi_lien_tiep >= max_orphan_count:
                         thoi_diem_mo_khoa_cau_dao = time.time() + orphan_cooldown_second
-                        msg_cau_dao = f"🔌 <b>[CẦU DAO] ĐÃ SẬP! KHÓA NÒNG {orphan_cooldown_second} GIÂY!</b>\nPhát hiện sàn bị lỗi Illiquidity (Mồ côi liên tục 3 lần). Tạm dừng chờ thanh khoản ổn hơn!"
+                        msg_cau_dao = f"🔌 <b>{master_name} - [CẦU DAO] ĐÃ SẬP! KHÓA NÒNG {orphan_cooldown_second} GIÂY!</b>\nPhát hiện sàn bị lỗi Illiquidity (Mồ côi liên tục 3 lần). Tạm dừng chờ thanh khoản ổn hơn!"
                         print(f"🆘 {msg_cau_dao}")
                         r.lpush("TELEGRAM_QUEUE", msg_cau_dao)
                         dem_so_lan_mo_coi_lien_tiep = 0 # Reset đếm lại
@@ -359,7 +364,7 @@ try:
                         r.lpush(f"QUEUE:ORDER:{cap_hien_tai['base_exchange'].upper()}", json.dumps({"action": "CLOSE_BY_TICKET", "ticket": ub['ticket']}))
                         co_lenh_bi_tram = True
                         if time.time() - thoi_diem_spam_tram_cuoi > 60:
-                            r.lpush("TELEGRAM_QUEUE", f"🔪 <b>AUTO-CUT (ORPHAN)</b>\n{msg}")
+                            r.lpush("TELEGRAM_QUEUE", f"🔪 <b>{master_name} - AUTO-CUT (ORPHAN)</b>\n{msg}")
                             
                     for ud in unpaired_diff:
                         msg = f"🚨 [MỒ CÔI {args.pair_id}] Lệnh lạ mặt Diff #{ud['ticket']}! Trảm!"
@@ -367,7 +372,7 @@ try:
                         r.lpush(f"QUEUE:ORDER:{cap_hien_tai['diff_exchange'].upper()}", json.dumps({"action": "CLOSE_BY_TICKET", "ticket": ud['ticket']}))
                         co_lenh_bi_tram = True
                         if time.time() - thoi_diem_spam_tram_cuoi > 60:
-                            r.lpush("TELEGRAM_QUEUE", f"🔪 <b>AUTO-CUT (ORPHAN)</b>\n{msg}")
+                            r.lpush("TELEGRAM_QUEUE", f"🔪 <b>{master_name} - AUTO-CUT (ORPHAN)</b>\n{msg}")
 
                 # Khởi động lại khiên bảo vệ nếu có vung đao
                 if co_lenh_bi_tram:
@@ -443,7 +448,7 @@ try:
                     
                     # Báo Telegram ngay lập tức khi xả
                     if time.time() - thoi_diem_spam_tram_cuoi > 60:
-                        r.lpush("TELEGRAM_QUEUE", f"🛑 <b>GIỜ CẤM GIAO DỊCH</b>\nĐã kích hoạt máy chém, xả toàn bộ lệnh {args.pair_id} để né dãn Spread!")
+                        r.lpush("TELEGRAM_QUEUE", f"🛑 <b>{master_name} - GIỜ CẤM GIAO DỊCH</b>\nĐã kích hoạt máy chém, xả toàn bộ lệnh {args.pair_id} để né dãn Spread!")
                         thoi_diem_spam_tram_cuoi = time.time()
                 
                 # Ngăn không cho chạy xuống phần Quân sư tính toán vào lệnh mới

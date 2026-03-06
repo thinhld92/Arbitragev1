@@ -73,5 +73,19 @@ for cap in danh_sach_cap:
     )
     time.sleep(2)
 
+# ==========================================
+# 3. BẬT TERMINAL KẾ TOÁN TRƯỞNG (ACCOUNTANT)
+# ==========================================
+print("\n🧠 ĐANG ĐÁNH THỨC KẾ TOÁN TRƯỞNG (ACCOUNTANT)...")
+for cap in danh_sach_cap:
+    pair_id = cap['id']
+    print(f"   👉 Đang gọi Accountant cho cặp: {pair_id} (Chế độ thu nhỏ)")
+    
+    # 👉 Tuyệt chiêu: Truyền nguyên 1 chuỗi string và bật shell=True
+    command = f'start "KETOAN_{pair_id}" /min cmd /k python src/accountant.py --pair_id {pair_id}'
+    subprocess.Popen(command, shell=True)
+    
+    time.sleep(2)
+
 print("\n✅ QUẢN ĐỐC ĐÃ BỐ TRÍ XONG TOÀN BỘ NHÂN SỰ!")
 print("👀 Hãy theo dõi các cửa sổ Terminal để xem hệ thống hoạt động.")

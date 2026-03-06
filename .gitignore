@@ -3,6 +3,9 @@ logs/
 *.log
 log_*.txt
 
+# Thư mục chứa history
+history/
+
 # Môi trường ảo (Virtual Environment)
 venv/
 env/

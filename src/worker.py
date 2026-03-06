@@ -119,7 +119,7 @@ else:
 # ==========================================
 # HÀM HỖ TRỢ: ĐÓNG 1 LỆNH (DÙNG CHO THREAD)
 # ==========================================
-def thuc_thi_dong_1_lenh(pos, current_tick, comment):
+def thuc_thi_dong_1_lenh(pos, current_tick, comment, chi_thi):
     close_type = mt5.ORDER_TYPE_SELL if pos.type == mt5.ORDER_TYPE_BUY else mt5.ORDER_TYPE_BUY
     price = current_tick.bid if close_type == mt5.ORDER_TYPE_SELL else current_tick.ask
     
@@ -133,19 +133,84 @@ def thuc_thi_dong_1_lenh(pos, current_tick, comment):
         "deviation": 20,
         "magic": 0,
         "type_time": mt5.ORDER_TIME_GTC,
-        "type_filling": CACHED_FILLING_MODE, # <--- SỬ DỤNG CACHE
+        "type_filling": CACHED_FILLING_MODE,
     }
-    if comment:
-        request["comment"] = comment
+    if comment: request["comment"] = comment
     
     with mt5_lock: 
         result = mt5.order_send(request)
         
     if result.retcode == mt5.TRADE_RETCODE_DONE:
-        print(f"💰 {bot_name} ĐÃ ĐÓNG LỆNH #{pos.ticket} THÀNH CÔNG.")
+        print(f"💰 {bot_name} ĐÃ ĐÓNG LỆNH #{pos.ticket}. Đang đợi sàn chốt sổ...")
+        
+        # 👉 VÒNG LẶP SĂN MỒI CHỜ LỊCH SỬ (Tối đa 5 giây)
+        da_chot_so = False
+        deals = []
+        for _ in range(25): # 25 lần x 0.2s = 5 giây
+            time.sleep(0.2)
+            deals = mt5.history_deals_get(position=pos.ticket)
+            if deals:
+                # Kiểm tra xem trong lịch sử đã có cái deal ĐÓNG LỆNH (OUT) chưa
+                co_deal_out = any(d.entry in [mt5.DEAL_ENTRY_OUT, mt5.DEAL_ENTRY_OUT_BY] for d in deals)
+                if co_deal_out:
+                    da_chot_so = True
+                    break # Chốt sổ xong rồi, đập vỡ đồng hồ thoát ra thôi!
+                    
+        if da_chot_so and deals:
+            # Bòn rút tiền thật, phí thật, giá thật
+            tong_profit = sum(d.profit for d in deals)
+            tong_fee = sum(d.commission + d.swap for d in deals)
+            gia_vao = next((d.price for d in deals if d.entry == mt5.DEAL_ENTRY_IN), 0)
+            gia_ra = next((d.price for d in deals if d.entry in [mt5.DEAL_ENTRY_OUT, mt5.DEAL_ENTRY_OUT_BY]), 0)
+
+            # Đóng gói Biên lai gửi cho Kế toán
+            bien_lai = {
+                "role": chi_thi.get("role", "UNKNOWN"),
+                "ticket": pos.ticket,
+                "volume": pos.volume,
+                "profit": tong_profit,
+                "fee": tong_fee,
+                "open_price": gia_vao,
+                "close_price": gia_ra,
+                "context": chi_thi.get("context", {}) 
+            }
+            r.lpush("QUEUE:ACCOUNTANT", json.dumps(bien_lai))
+        else:
+            print(f"⚠️ {bot_name} Báo động: Lệnh #{pos.ticket} đã đóng nhưng MT5 không nhả lịch sử sau 5s!")
+            
     else:
         print(f"❌ {bot_name} LỖI ĐÓNG LỆNH #{pos.ticket}: {result.comment}")
         r.lpush(QUEUE_TELEGRAM, f"❌ <b>{bot_name} LỖI ĐÓNG LỆNH</b>\nTicket: #{pos.ticket} | Lỗi: {result.comment}")
+
+# ==========================================
+# HÀM HỖ TRỢ: ĐỒNG BỘ LỊCH SỬ (CHO LỆNH STOPOUT)
+# ==========================================
+def thuc_thi_dong_bo_lich_su(chi_thi):
+    ticket = chi_thi.get("ticket")
+    print(f"🔍 {bot_name} Đang truy xuất dữ liệu lịch sử của lệnh #{ticket}...")
+    
+    # Không cần đợi vì sàn đã đóng lệnh từ trước
+    deals = mt5.history_deals_get(position=ticket)
+    if deals:
+        tong_profit = sum(d.profit for d in deals)
+        tong_fee = sum(d.commission + d.swap for d in deals)
+        gia_vao = next((d.price for d in deals if d.entry == mt5.DEAL_ENTRY_IN), 0)
+        gia_ra = next((d.price for d in deals if d.entry in [mt5.DEAL_ENTRY_OUT, mt5.DEAL_ENTRY_OUT_BY]), 0)
+
+        bien_lai = {
+            "role": chi_thi.get("role", "UNKNOWN"),
+            "ticket": ticket,
+            "volume": deals[0].volume if deals else 0,
+            "profit": tong_profit,
+            "fee": tong_fee,
+            "open_price": gia_vao,
+            "close_price": gia_ra,
+            "context": chi_thi.get("context", {}) 
+        }
+        r.lpush("QUEUE:ACCOUNTANT", json.dumps(bien_lai))
+        print(f"✅ Đã gửi hồ sơ đối soát của #{ticket} cho Kế toán!")
+    else:
+        print(f"⚠️ Không tìm thấy dữ liệu lịch sử của #{ticket} trên MT5!")
 
 # ==========================================
 # HÀM BÓP CÒ CHÍNH (PHÂN LOẠI LỆNH)
@@ -192,7 +257,7 @@ def thuc_thi_chi_thi(chi_thi, current_tick):
             lenh_can_dong = lenh_sap_xep[:count] 
             
             for pos in lenh_can_dong:
-                threading.Thread(target=thuc_thi_dong_1_lenh, args=(pos, current_tick, comment)).start()
+                threading.Thread(target=thuc_thi_dong_1_lenh, args=(positions[0], current_tick, comment, chi_thi)).start()
 
     # 👉 THÊM CHIÊU CHÉM ĐÍCH DANH VÀO DƯỚI CÙNG HÀM thuc_thi_chi_thi
     elif action == "CLOSE_BY_TICKET":
@@ -201,10 +266,12 @@ def thuc_thi_chi_thi(chi_thi, current_tick):
         positions = mt5.positions_get(ticket=ticket_can_dong) 
         if positions:
             # Tìm thấy thì ném cho Thread phụ đi chém
-            threading.Thread(target=thuc_thi_dong_1_lenh, args=(positions[0], current_tick, comment)).start()
+            threading.Thread(target=thuc_thi_dong_1_lenh, args=(positions[0], current_tick, comment, chi_thi)).start()
         else:
             print(f"⚠️ {bot_name} Lệnh tử hình Ticket #{ticket_can_dong} thất bại do không tìm thấy lệnh trên sàn (Đã bị StopOut trước đó?)")
 
+    elif action == "FETCH_HISTORY_ONLY":
+        threading.Thread(target=thuc_thi_dong_bo_lich_su, args=(chi_thi,)).start()
 # ==========================================
 # 3. VÒNG LẶP CHIẾN TRANH (MAIN LOOP)
 # ==========================================
