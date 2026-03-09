@@ -76,6 +76,11 @@ max_orders = cap_hien_tai['max_orders']
 hold_time_sec = cap_hien_tai.get('hold_time', 180)
 alert_equity = cap_hien_tai.get('alert_equity', 0)
 stable_mode = cap_hien_tai.get('stable_mode', 'freeze')
+
+# 👉 LẤY BỘ LỌC TỪ CONFIG
+filter_entry = cap_hien_tai.get('filter_entry', 'nguoc') 
+filter_close = cap_hien_tai.get('filter_close', 'none')
+
 max_orphan_count = cap_hien_tai.get('max_orphan_count', 3) 
 orphan_cooldown_second = cap_hien_tai.get('orphan_cooldown_second', 1800) 
 
@@ -209,6 +214,11 @@ try:
                         stable_time_sec = cap_hien_tai['stable_time'] / 1000.0
                         max_tick_delay = cap_hien_tai.get('max_tick_delay', 5.0)
                         stable_mode = cap_hien_tai.get('stable_mode', 'freeze')
+                        
+                        # 👉 HOT RELOAD LỌC
+                        filter_entry = cap_hien_tai.get('filter_entry', 'nguoc')
+                        filter_close = cap_hien_tai.get('filter_close', 'none')
+                        
                         alert_equity = cap_hien_tai.get('alert_equity', 0)
                         max_orphan_count = cap_hien_tai.get('max_orphan_count', 3)          
                         orphan_cooldown_second = cap_hien_tai.get('orphan_cooldown_second', 1800) 
@@ -219,13 +229,14 @@ try:
                     msg_reload = (
                         f"🔄 [HOT RELOAD] ĐÃ CẬP NHẬT THÔNG SỐ MỚI:\n"
                         f"   ├─ Chiến thuật : {stable_mode} {dev_entry}|{dev_close} | {stable_time_sec*1000:.0f}ms | Hold {hold_time_sec}s\n"
+                        f"   ├─ Bộ lọc (In/Out): {filter_entry.upper()} / {filter_close.upper()}\n"
                         f"   ├─ Quản lý vốn : Cảnh báo EQ < {alert_equity}$ | Vol {vol_b}|{vol_d}\n"
-                        f"   └─ Cầu dao     : Khóa {orphan_cooldown_second}s nếu mồ côi {max_orphan_count} lần"
+                        f"   └─ Cầu dao    : Khóa {orphan_cooldown_second}s nếu mồ côi {max_orphan_count} lần"
                     )
                     print(msg_reload)
 
                     # 2. Chuỗi dành cho File Log (Nén lại thành 1 dòng duy nhất, không xuống dòng)
-                    msg_reload_log = f"[HOT RELOAD] Lệch {dev_entry}|{dev_close}, Băng {stable_time_sec*1000:.0f}ms, Hold {hold_time_sec}s, EQ<{alert_equity}$, Cầu dao {max_orphan_count}x/{orphan_cooldown_second}s"
+                    msg_reload_log = f"[HOT RELOAD] Lệch {dev_entry}|{dev_close}, Lọc In:{filter_entry}/Out:{filter_close}, Băng {stable_time_sec*1000:.0f}ms, Hold {hold_time_sec}s, EQ<{alert_equity}$, Cầu dao {max_orphan_count}x/{orphan_cooldown_second}s"
                     logging.info(msg_reload_log)
                 except Exception as e:
                     pass
@@ -607,29 +618,34 @@ try:
                             if not da_xu_ly_vao_lenh_cho_tick_nay: 
                                 
                                 # ==================================================
-                                # 🛡️ BỘ LỌC CHỐNG TRƯỢT GIÁ ÂM (LÚC THOÁT LỆNH)
+                                # 🛡️ BỘ LỌC ĐÓNG LỆNH (THUẬN / NGƯỢC / NONE)
                                 # ==================================================
                                 bo_qua_dong_lenh = False
                                 ly_do_dong = ""
                                 
-                                if gia_base_luc_bat_dau_lech_dong > 0:
+                                # Chỉ kích hoạt lọc nếu đã lưu giá mốc VÀ chế độ khác 'none'
+                                if gia_base_luc_bat_dau_lech_dong > 0 and filter_close != 'none':
                                     chenh_lech_gia_hien_tai = tick_base['bid'] - gia_base_luc_bat_dau_lech_dong
-                                    
-                                    # Đóng lệnh thì thằng chậm (DIFF) phải đánh ngược hướng lúc vào
                                     lenh_dong_cua_thang_cham = "BUY" if huong_dang_danh == "BUY" else "SELL"
                                     
-                                    if chenh_lech_gia_hien_tai > 0: # 🚀 GIÁ ĐANG VỌT TĂNG
-                                        if lenh_dong_cua_thang_cham == "BUY": 
+                                    if chenh_lech_gia_hien_tai > 0: # 🚀 GIÁ BASE ĐANG VỌT TĂNG
+                                        if filter_close == 'thuan' and lenh_dong_cua_thang_cham == "BUY": 
                                             bo_qua_dong_lenh = True
-                                            ly_do_dong = "Giá TĂNG. Tránh DIFF BUY (đóng lệnh) đu đỉnh!"
-                                    
-                                    elif chenh_lech_gia_hien_tai < 0: # 📉 GIÁ ĐANG ĐỔ SẬP
-                                        if lenh_dong_cua_thang_cham == "SELL":  
+                                            ly_do_dong = "[THUẬN] Giá TĂNG. Tránh chốt lệnh DIFF BUY đu đỉnh!"
+                                        elif filter_close == 'nguoc' and lenh_dong_cua_thang_cham == "SELL":
                                             bo_qua_dong_lenh = True
-                                            ly_do_dong = "Giá GIẢM. Tránh DIFF SELL (đóng lệnh) bán đáy!"
+                                            ly_do_dong = "[NGƯỢC] Giá TĂNG. Tránh chốt lệnh DIFF SELL!"
+                                            
+                                    elif chenh_lech_gia_hien_tai < 0: # 📉 GIÁ BASE ĐANG ĐỔ SẬP
+                                        if filter_close == 'thuan' and lenh_dong_cua_thang_cham == "SELL":  
+                                            bo_qua_dong_lenh = True
+                                            ly_do_dong = "[THUẬN] Giá GIẢM. Tránh chốt lệnh DIFF SELL bán đáy!"
+                                        elif filter_close == 'nguoc' and lenh_dong_cua_thang_cham == "BUY":
+                                            bo_qua_dong_lenh = True
+                                            ly_do_dong = "[NGƯỢC] Giá GIẢM. Tránh chốt lệnh DIFF BUY!"
 
                                 if bo_qua_dong_lenh:
-                                    print(f"🛡️ [LỌC TREND ĐÓNG] Hủy chốt lời! {ly_do_dong} (Quán tính: {chenh_lech_gia_hien_tai:.2f})")
+                                    print(f"🛡️ Hủy chốt lời! {ly_do_dong} (Quán tính: {chenh_lech_gia_hien_tai:.2f})")
                                     # Hủy đếm ngược, ép hệ thống chờ giá ổn định lại mới cho đóng
                                     thoi_diem_bat_dau_lech_dong = 0
                                     gia_base_luc_bat_dau_lech_dong = 0.0 
@@ -669,7 +685,7 @@ try:
                                 r.lpush(f"QUEUE:ORDER:{cap_hien_tai['diff_exchange'].upper()}", json.dumps({
                                     "action": "CLOSE_BY_TICKET", "ticket": cap_bi_dong['diff_ticket'], "comment": close_comment, "role": "DIFF", "context": context_data
                                 }))
-                                                                                                                                                                
+                                                                                                                                                                                                
                                 lich_su_vao_lenh.remove(cap_bi_dong)
                                 thoi_diem_vua_ra_lenh_dong = time.time() 
                                 da_xu_ly_vao_lenh_cho_tick_nay = True
@@ -718,31 +734,34 @@ try:
                         if not da_xu_ly_vao_lenh_cho_tick_nay:
                             
                             # ==================================================
-                            # 🛡️ BỘ LỌC CHỐNG TRƯỢT GIÁ ÂM (LÚC VÀO LỆNH)
-                            # ⚠️ QUY ƯỚC: Sàn BASE nhanh hơn, Sàn DIFF chậm hơn
+                            # 🛡️ BỘ LỌC VÀO LỆNH (THUẬN / NGƯỢC / NONE)
                             # ==================================================
                             bo_qua_lenh_nay = False
                             ly_do = ""
                             
-                            # Chỉ đo quán tính nếu đã có giá mốc ban đầu
-                            if gia_base_luc_bat_dau_lech > 0:
+                            # Chỉ kích hoạt lọc nếu đã lưu giá mốc VÀ chế độ khác 'none'
+                            if gia_base_luc_bat_dau_lech > 0 and filter_entry != 'none':
                                 chenh_lech_gia_hien_tai = tick_base['bid'] - gia_base_luc_bat_dau_lech
                                 lenh_cua_thang_cham = tin_hieu["lenh_diff"]
                                 
-                                if chenh_lech_gia_hien_tai > 0: # 🚀 GIÁ ĐANG VỌT TĂNG
-                                    if lenh_cua_thang_cham == "BUY": 
-                                        # Diff vào lệnh BUY chậm -> Dính giá chót vót (Lỗ trượt)
+                                if chenh_lech_gia_hien_tai > 0: # 🚀 GIÁ BASE ĐANG VỌT TĂNG
+                                    if filter_entry == 'thuan' and lenh_cua_thang_cham == "BUY": 
                                         bo_qua_lenh_nay = True
-                                        ly_do = "Giá TĂNG. Tránh DIFF BUY đu đỉnh!"
-                                
-                                elif chenh_lech_gia_hien_tai < 0: # 📉 GIÁ ĐANG ĐỔ SẬP
-                                    if lenh_cua_thang_cham == "SELL":  
-                                        # Diff vào lệnh SELL chậm -> Bán ở giá đáy (Lỗ trượt)
+                                        ly_do = "[THUẬN] Giá TĂNG. Tránh vào lệnh DIFF BUY đu đỉnh!"
+                                    elif filter_entry == 'nguoc' and lenh_cua_thang_cham == "SELL":
                                         bo_qua_lenh_nay = True
-                                        ly_do = "Giá GIẢM. Tránh DIFF SELL bán đáy!"
+                                        ly_do = "[NGƯỢC] Giá TĂNG. Tránh vào lệnh DIFF SELL!"
+                                        
+                                elif chenh_lech_gia_hien_tai < 0: # 📉 GIÁ BASE ĐANG ĐỔ SẬP
+                                    if filter_entry == 'thuan' and lenh_cua_thang_cham == "SELL":  
+                                        bo_qua_lenh_nay = True
+                                        ly_do = "[THUẬN] Giá GIẢM. Tránh vào lệnh DIFF SELL bán đáy!"
+                                    elif filter_entry == 'nguoc' and lenh_cua_thang_cham == "BUY":
+                                        bo_qua_lenh_nay = True
+                                        ly_do = "[NGƯỢC] Giá GIẢM. Tránh vào lệnh DIFF BUY!"
 
                             if bo_qua_lenh_nay:
-                                print(f"🛡️ [LỌC TREND VÀO] Hủy bóp cò {loai_lenh_moi}! {ly_do} (Quán tính: {chenh_lech_gia_hien_tai:.2f})")
+                                print(f"🛡️ Hủy bóp cò {loai_lenh_moi}! {ly_do} (Quán tính: {chenh_lech_gia_hien_tai:.2f})")
                                 # Hủy đếm ngược, ép hệ thống tìm lại điểm cân bằng an toàn
                                 thoi_diem_bat_dau_lech_vao = 0
                                 gia_base_luc_bat_dau_lech = 0.0 
