@@ -69,3 +69,23 @@ Dữ liệu chạy Bot thực tế (Vào lệnh, Chốt lời, Cắt lệnh mồ
 Gặp bão tin tức cực mạnh? Bạn không cần tắt Bot. Hãy mở config.json, xóa sạch danh sách trading_hours thành [] rồi lưu lại (Ctrl+S). Master sẽ lập tức "khóa cò súng" cấm vào lệnh mới, nhưng vẫn thức để canh chốt lời các cặp lệnh cũ đang gồng!
 
 Phát triển và Thiết kế Kiến trúc bởi Hehehe ☕💻 - Built for High-Frequency Arbitrage.
+
+1 số yêu cầu
+1. worker có nhiệm vụ báo từng tick giá lên cho master
+2. master sẽ check giá giữa 2 sàn, thoả logic arbitrage trong trading_logic.py thì vào lệnh hoặc cắt lệnh
+3. Có khung giờ vào lệnh, ngoài khung giờ vào lệnh thì chỉ cắt lệnh, không vào lệnh thêm
+4. Khung giờ giới nghiêm, tất cả các lệnh đang có thì tiến hành cắt hết bảo vệ vị thế
+5. Khi Equity nhỏ hơn mức quy định trong config thì không vào lệnh mới, chỉ canh cắt lệnh đang có
+6. Tính năng ghép cặp để chống lệch chân khi vào lệnh miss, cắt lệnh miss hoặc bị stopout, và để lưu data sau này
+7. Không vào lệnh mới ngược hướng với các lệnh đang có
+8. Các lệnh cách nhau cooldown_second cấu hình trong config
+9. Có thời gian giữ lệnh tối thiểu trước khi cắt
+10. Có 2 chế độ là freeze và continuous cần tuân thủ tuyệt đối
+ A freeze là khi thoả tín hiệu vào lệnh hoặc cắt lệnh, tick phải đứng yên  trong stable_time mà không được có tick mới
+ B continuous là chấp nhận có tick mới nhưng khoảng lệch phải liên tục   thoả điều kiện trong stable_time
+11. Có số lệnh tối đa, quá max_orders thì không được thêm lệnh để bảo vệ tài khoản
+12. Có Kế toán ghi lại chi tiết các lệnh đã đóng
+13. Khi 1 sàn miss liên tiếp max_orphan_count thì tạm ngưng các tín hiệu đối với sàn đó trong orphan_cooldown_second để hạn chế rủi ro thanh khoản làm lệch chân quá nhiều lần.
+14. Khi tắt bot thì cần có cơ chế phục hồi trạng thái các lệnh đang tồn tại nếu có
+15. Khi bị stopout thì lập tức cắt lệnh ở sàn đối ứng
+16. Khi bị lỗi vào lệnh hoặc lỗi cắt lệnh gây lệch chân thì lập tức cắt lệnh ở sàn đối ứng

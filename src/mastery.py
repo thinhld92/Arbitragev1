@@ -4,6 +4,7 @@ import ujson as json
 import time
 import argparse
 import logging
+import uuid
 from logging.handlers import RotatingFileHandler
 from datetime import datetime, timezone
 import ctypes
@@ -170,6 +171,10 @@ print(f"🚀 MASTER {args.pair_id} SẴN SÀNG CHIẾN ĐẤU (SELF-HEALING + BL
 last_time_update = 0
 current_utc_time_str = "00:00"
 
+# --- Khay Hứng Két Quả JOB_ID (UUID) ---
+pending_jobs = {} # Format: {"JOB_XYZ": {"base_ticket": 123, "diff_ticket": None, "time": 12345678, "chenh_vao": 0, "tinh_chat_vao": ...}}
+QUEUE_ORDER_RESULT = f"QUEUE:ORDER_RESULT:{args.pair_id}"
+
 # --- Cầu Dao Chống Mồ Côi ---
 dem_so_lan_mo_coi_lien_tiep = 0
 thoi_diem_mo_khoa_cau_dao = 0
@@ -183,6 +188,7 @@ gia_base_luc_bat_dau_lech_dong = 0.0  # 👉 BIẾN LƯU GIÁ ĐỂ ĐO TREND L�
 # ==========================================
 # 3. VÒNG LẶP SUY NGHĨ CỦA MASTER
 # ==========================================
+last_config_check_time = 0
 try:
     while True:
         # 🛡️ ÁO GIÁP KEVLAR BỌC BÊN TRONG VÒNG LẶP
@@ -198,7 +204,12 @@ try:
             # ========================================================
             # 👑 1. HOT RELOAD & CHECK GIỜ
             # ========================================================
-            current_modified = os.path.getmtime(CONFIG_FILE)
+            if now_sec - last_config_check_time >= 1.0:
+                last_config_check_time = now_sec
+                current_modified = os.path.getmtime(CONFIG_FILE)
+            else:
+                current_modified = last_config_modified
+                
             if current_modified != last_config_modified:
                 time.sleep(0.05)
                 try:
@@ -281,8 +292,8 @@ try:
             equity_base = float(eq_base_raw) if eq_base_raw is not None else 999999.0
             equity_diff = float(eq_diff_raw) if eq_diff_raw is not None else 999999.0
 
-            thoi_gian_tu_lan_vao_cuoi = time.time() - thoi_diem_vao_lenh_cuoi
-            thoi_gian_tu_lan_dong_cuoi = time.time() - thoi_diem_vua_ra_lenh_dong
+            thoi_gian_tu_lan_vao_cuoi = now_sec - thoi_diem_vao_lenh_cuoi
+            thoi_gian_tu_lan_dong_cuoi = now_sec - thoi_diem_vua_ra_lenh_dong
             trong_thoi_gian_bao_ve = (thoi_gian_tu_lan_vao_cuoi < 5.0) or (thoi_gian_tu_lan_dong_cuoi < 5.0)
 
             # XÓA TRÍ NHỚ AN TOÀN KHI THỊ TRƯỜNG SẠCH BÓNG LỆNH
@@ -295,13 +306,76 @@ try:
                     print("🧹 Đã dọn sạch Sổ Cái (2 sàn đều không còn lệnh).")
 
             # ========================================================
-            # 🔗 3. ÔNG TƠ BÀ NGUYỆT: GHÉP CẶP TICKET THÔNG MINH
+            # 🔗 2.5. NHẬN KẾT QUẢ GIAO VIỆC (JOB_ID) TỪ WORKER
             # ========================================================
-            base_tickets_on_exchange = [p['ticket'] for p in list_pos_base]
-            diff_tickets_on_exchange = [p['ticket'] for p in list_pos_diff]
+            # Rút toàn bộ thư trong hòm báo cáo
+            while True:
+                msg_raw = r.rpop(QUEUE_ORDER_RESULT)
+                if not msg_raw: break
+                
+                try:
+                    result_data = json.loads(msg_raw)
+                    job_id = result_data.get("job_id")
+                    role = result_data.get("role")
+                    ticket = result_data.get("ticket")
+                    
+                    if job_id and role and ticket:
+                        print(f"📮 [THƯ KÝ] Nhận hóa đơn Ticket #{ticket} từ {role} cho Job {job_id}")
+                        if job_id not in pending_jobs:
+                            # Khởi tạo bản nháp nếu đây là thư đến đầu tiên của Job này
+                            pending_jobs[job_id] = {
+                                "base_ticket": None, "diff_ticket": None, 
+                                "time": time.time(), 
+                                "chenh_vao": result_data.get("chenh_vao", 0),
+                                "tinh_chat_vao": result_data.get("tinh_chat_vao", "UNKNOWN"),
+                                # Kế toán
+                                "tick_hz_base_in": result_data.get("tick_hz_base_in", 0),
+                                "tick_hz_diff_in": result_data.get("tick_hz_diff_in", 0)
+                            }
+                            
+                        # Điền số báo danh vào bản nháp
+                        if role == "BASE": pending_jobs[job_id]["base_ticket"] = ticket
+                        elif role == "DIFF": pending_jobs[job_id]["diff_ticket"] = ticket
+                        
+                        # 👉 KIỂM TRA ĐIỀN ĐỦ 2 CHỖ TRỐNG CHƯA?
+                        if pending_jobs[job_id]["base_ticket"] is not None and pending_jobs[job_id]["diff_ticket"] is not None:
+                            b_ticket = pending_jobs[job_id]["base_ticket"]
+                            d_ticket = pending_jobs[job_id]["diff_ticket"]
+                            
+                            lich_su_vao_lenh.append({
+                                "id_cap": f"PAIR_{job_id}", # Dùng luôn Job ID siêu duy nhất
+                                "base_ticket": b_ticket,
+                                "diff_ticket": d_ticket,
+                                "time_match": time.time(),
+                                "chenh_lech_vao": pending_jobs[job_id]["chenh_vao"],
+                                "tinh_chat_vao": pending_jobs[job_id]["tinh_chat_vao"],
+                                # Kế toán
+                                "tick_hz_base_in": pending_jobs[job_id].get("tick_hz_base_in", 0),
+                                "tick_hz_diff_in": pending_jobs[job_id].get("tick_hz_diff_in", 0)
+                            })
+                            luu_tri_nho()
+                            dem_so_lan_mo_coi_lien_tiep = 0
+                            print(f"💞 [GHÉP UUID] Ghép thành công 100% cặp lệnh {b_ticket} 💍 {d_ticket} (Job: {job_id})!")
+                            del pending_jobs[job_id] # Xóa nháp
+                except Exception as e:
+                    print(f"⚠️ Lỗi đọc thư ký: {e}")
 
-            paired_base_tickets = [p['base_ticket'] for p in lich_su_vao_lenh]
-            paired_diff_tickets = [p['diff_ticket'] for p in lich_su_vao_lenh]
+            # Dọn dẹp rác (Pending Jobs quá 60s mà vẫn mồ côi 1 bên)
+            now_sec = time.time()
+            expired_jobs = [jid for jid, jdata in pending_jobs.items() if now_sec - jdata["time"] > 60]
+            for jid in expired_jobs:
+                print(f"🗑️ [DỌN RÁC] Xóa Job {jid} do kẹt hóa đơn quá 60s!")
+                del pending_jobs[jid]
+
+            # ========================================================
+            # 🔗 3. ÔNG TƠ BÀ NGUYỆT: GHÉP CẶP DỰ PHÒNG (FALLBACK TIME_MSC)
+            # ========================================================
+            # Tối ưu: Dùng set để tăng tốc độ truy xuất in (O(1) so với O(N))
+            base_tickets_on_exchange = {p['ticket'] for p in list_pos_base}
+            diff_tickets_on_exchange = {p['ticket'] for p in list_pos_diff}
+
+            paired_base_tickets = {p['base_ticket'] for p in lich_su_vao_lenh}
+            paired_diff_tickets = {p['diff_ticket'] for p in lich_su_vao_lenh}
 
             unpaired_base = [p for p in list_pos_base if p['ticket'] not in paired_base_tickets]
             unpaired_diff = [p for p in list_pos_diff if p['ticket'] not in paired_diff_tickets]
@@ -310,8 +384,9 @@ try:
             
             # ⚡ CẤM GHÉP CẶP LÚC TRỄ MẠNG HOẶC ĐANG TRONG GIỜ TỬ THẦN
             if so_luong_co_the_ghep > 0 and not trong_thoi_gian_bao_ve and not trong_gio_cam:
-                unpaired_base.sort(key=lambda x: x['time_msc']) 
-                unpaired_diff.sort(key=lambda x: x['time_msc'])
+                # 👉 Dùng .get() để an toàn nếu cấu trúc position dictionary thiếu key time
+                unpaired_base.sort(key=lambda x: x.get('time_msc', x.get('time_update_msc', 0))) 
+                unpaired_diff.sort(key=lambda x: x.get('time_msc', x.get('time_update_msc', 0)))
                 
                 for i in range(so_luong_co_the_ghep):
                     b = unpaired_base[i]
@@ -360,18 +435,24 @@ try:
                             "mode_vao": cap.get('tinh_chat_vao', 'UNKNOWN'),
                             "chenh_dong": 0, 
                             "mode_dong": "[STOPOUT]", # Ghi sổ là chết do Stopout/Mất 1 chân
-                            "action_type": "FORCE_CLOSE"
+                            "action_type": "FORCE_CLOSE",
+                            "tick_hz_base_in": cap.get("tick_hz_base_in", 0),
+                            "tick_hz_diff_in": cap.get("tick_hz_diff_in", 0),
+                            "tick_hz_base_out": tick_base.get("tick_hz", 0),
+                            "tick_hz_diff_out": tick_diff.get("tick_hz", 0)
                         }
                         
+                        pipe = r.pipeline()
                         # 1. Sai Worker BASE đi chém cái chân CÒN SỐNG
-                        r.lpush(f"QUEUE:ORDER:{cap_hien_tai['base_exchange'].upper()}", json.dumps({
+                        pipe.lpush(f"QUEUE:ORDER:{cap_hien_tai['base_exchange'].upper()}", json.dumps({
                             "action": "CLOSE_BY_TICKET", "ticket": cap['base_ticket'], "comment": "FA_CUT", "role": "BASE", "context": context_data
                         }))
                         
                         # 2. Sai Worker DIFF đi truy xuất lịch sử cái chân ĐÃ CHẾT
-                        r.lpush(f"QUEUE:ORDER:{cap_hien_tai['diff_exchange'].upper()}", json.dumps({
+                        pipe.lpush(f"QUEUE:ORDER:{cap_hien_tai['diff_exchange'].upper()}", json.dumps({
                             "action": "FETCH_HISTORY_ONLY", "ticket": cap['diff_ticket'], "role": "DIFF", "context": context_data
                         }))
+                        pipe.execute()
                         
                         co_lenh_bi_tram = True
                         
@@ -392,18 +473,24 @@ try:
                             "mode_vao": cap.get('tinh_chat_vao', 'UNKNOWN'),
                             "chenh_dong": 0, 
                             "mode_dong": "[STOPOUT]", # Ghi sổ là chết do Stopout
-                            "action_type": "FORCE_CLOSE"
+                            "action_type": "FORCE_CLOSE",
+                            "tick_hz_base_in": cap.get("tick_hz_base_in", 0),
+                            "tick_hz_diff_in": cap.get("tick_hz_diff_in", 0),
+                            "tick_hz_base_out": tick_base.get("tick_hz", 0),
+                            "tick_hz_diff_out": tick_diff.get("tick_hz", 0)
                         }
                         
+                        pipe = r.pipeline()
                         # 1. Sai Worker DIFF đi chém cái chân còn sống
-                        r.lpush(f"QUEUE:ORDER:{cap_hien_tai['diff_exchange'].upper()}", json.dumps({
+                        pipe.lpush(f"QUEUE:ORDER:{cap_hien_tai['diff_exchange'].upper()}", json.dumps({
                             "action": "CLOSE_BY_TICKET", "ticket": cap['diff_ticket'], "comment": "FA_CUT", "role": "DIFF", "context": context_data
                         }))
                         
                         # 2. Sai Worker BASE đi nhặt xác cái chân đã chết Stopout
-                        r.lpush(f"QUEUE:ORDER:{cap_hien_tai['base_exchange'].upper()}", json.dumps({
+                        pipe.lpush(f"QUEUE:ORDER:{cap_hien_tai['base_exchange'].upper()}", json.dumps({
                             "action": "FETCH_HISTORY_ONLY", "ticket": cap['base_ticket'], "role": "BASE", "context": context_data
                         }))
+                        pipe.execute()
                         
                         co_lenh_bi_tram = True
                         if config.get('telegram', {}).get('enable', False) and (time.time() - thoi_diem_spam_tram_cuoi > 60):
@@ -439,7 +526,11 @@ try:
                             "chenh_dong": 0,
                             "mode_dong": "[ORPHAN_CUT]",
                             "action_type": "SINGLE_CLOSE",
-                            "is_single_cut": True
+                            "is_single_cut": True,
+                            "tick_hz_base_in": 0,
+                            "tick_hz_diff_in": 0,
+                            "tick_hz_base_out": tick_base.get("tick_hz", 0),
+                            "tick_hz_diff_out": tick_diff.get("tick_hz", 0)
                         }
                         r.lpush(f"QUEUE:ORDER:{cap_hien_tai['base_exchange'].upper()}", json.dumps({
                             "action": "CLOSE_BY_TICKET", "ticket": ub['ticket'], "comment": "ORPHAN_CUT", "role": "BASE", "context": context_data
@@ -460,7 +551,11 @@ try:
                             "chenh_dong": 0,
                             "mode_dong": "[ORPHAN_CUT]",
                             "action_type": "SINGLE_CLOSE",
-                            "is_single_cut": True
+                            "is_single_cut": True,
+                            "tick_hz_base_in": 0,
+                            "tick_hz_diff_in": 0,
+                            "tick_hz_base_out": tick_base.get("tick_hz", 0),
+                            "tick_hz_diff_out": tick_diff.get("tick_hz", 0)
                         }
                         r.lpush(f"QUEUE:ORDER:{cap_hien_tai['diff_exchange'].upper()}", json.dumps({
                             "action": "CLOSE_BY_TICKET", "ticket": ud['ticket'], "comment": "ORPHAN_CUT", "role": "DIFF", "context": context_data
@@ -533,6 +628,7 @@ try:
                 if len(lich_su_vao_lenh) > 0:
                     print(f"🛑 [GIỜ CẤM] Vào khung giờ tử thần! XẢ TOÀN BỘ {len(lich_su_vao_lenh)} CẶP LỆNH!")
                     
+                    pipe = r.pipeline()
                     # Dùng [:] để lặp qua bản sao của list, tránh lỗi khi đang lặp mà lại xóa phần tử
                     for cap in lich_su_vao_lenh[:]:
                         # 👉 TẠO KÝ ỨC DÀNH RIÊNG CHO CÚ CHÉM GIỜ CẤM ĐỂ KẾ TOÁN GHI SỔ
@@ -543,16 +639,21 @@ try:
                             "mode_vao": cap.get('tinh_chat_vao', 'UNKNOWN'),
                             "chenh_dong": 0, # Giờ cấm thì chém bất chấp lệch giá
                             "mode_dong": "[BLACKOUT_CUT]", # Đánh dấu sẹo trên Excel là do Giờ cấm
-                            "action_type": "BLACKOUT_CLOSE"
+                            "action_type": "BLACKOUT_CLOSE",
+                            "tick_hz_base_in": cap.get("tick_hz_base_in", 0),
+                            "tick_hz_diff_in": cap.get("tick_hz_diff_in", 0),
+                            "tick_hz_base_out": tick_base.get("tick_hz", 0),
+                            "tick_hz_diff_out": tick_diff.get("tick_hz", 0)
                         }
 
                         # Sai 2 thằng Worker xách đao đi chém kèm theo tờ giấy chứng tử
-                        r.lpush(f"QUEUE:ORDER:{cap_hien_tai['base_exchange'].upper()}", json.dumps({
+                        pipe.lpush(f"QUEUE:ORDER:{cap_hien_tai['base_exchange'].upper()}", json.dumps({
                             "action": "CLOSE_BY_TICKET", "ticket": cap['base_ticket'], "comment": "BLACKOUT", "role": "BASE", "context": context_data
                         }))
-                        r.lpush(f"QUEUE:ORDER:{cap_hien_tai['diff_exchange'].upper()}", json.dumps({
+                        pipe.lpush(f"QUEUE:ORDER:{cap_hien_tai['diff_exchange'].upper()}", json.dumps({
                             "action": "CLOSE_BY_TICKET", "ticket": cap['diff_ticket'], "comment": "BLACKOUT", "role": "DIFF", "context": context_data
                         }))
+                    pipe.execute()
                     
                     lich_su_vao_lenh.clear()
                     thoi_diem_vua_ra_lenh_dong = time.time()
@@ -675,16 +776,23 @@ try:
                                     "mode_vao": cap_bi_dong.get('tinh_chat_vao', 'UNKNOWN'),
                                     "chenh_dong": chenh_lech_close,
                                     "mode_dong": loai_tinh_chat_dong,
-                                    "action_type": loai_dong 
+                                    "action_type": loai_dong,
+                                    # Kẹp thêm thông số Accountant
+                                    "tick_hz_base_in": cap_bi_dong.get("tick_hz_base_in", 0),
+                                    "tick_hz_diff_in": cap_bi_dong.get("tick_hz_diff_in", 0),
+                                    "tick_hz_base_out": tick_base.get("tick_hz", 0),
+                                    "tick_hz_diff_out": tick_diff.get("tick_hz", 0)
                                 }
 
+                                pipe = r.pipeline()
                                 # Gửi lệnh KÈM THEO CONTEXT và ROLE (Để Kế toán phân biệt Base/Diff)
-                                r.lpush(f"QUEUE:ORDER:{cap_hien_tai['base_exchange'].upper()}", json.dumps({
+                                pipe.lpush(f"QUEUE:ORDER:{cap_hien_tai['base_exchange'].upper()}", json.dumps({
                                     "action": "CLOSE_BY_TICKET", "ticket": cap_bi_dong['base_ticket'], "comment": close_comment, "role": "BASE", "context": context_data
                                 }))
-                                r.lpush(f"QUEUE:ORDER:{cap_hien_tai['diff_exchange'].upper()}", json.dumps({
+                                pipe.lpush(f"QUEUE:ORDER:{cap_hien_tai['diff_exchange'].upper()}", json.dumps({
                                     "action": "CLOSE_BY_TICKET", "ticket": cap_bi_dong['diff_ticket'], "comment": close_comment, "role": "DIFF", "context": context_data
                                 }))
+                                pipe.execute()
                                                                                                                                                                                                 
                                 lich_su_vao_lenh.remove(cap_bi_dong)
                                 thoi_diem_vua_ra_lenh_dong = time.time() 
@@ -782,9 +890,30 @@ try:
                             huong_dang_danh = loai_lenh_moi
                             order_comment = cap_hien_tai.get('comment_entry', '')
                             
-                            # Gửi lệnh đi (Không cần gửi context vì Worker lúc này chưa cần ghi sổ)
-                            r.lpush(f"QUEUE:ORDER:{cap_hien_tai['base_exchange'].upper()}", json.dumps({"action": tin_hieu["lenh_base"], "volume": cap_hien_tai.get('volume_base', 0.01), "comment": order_comment}))
-                            r.lpush(f"QUEUE:ORDER:{cap_hien_tai['diff_exchange'].upper()}", json.dumps({"action": tin_hieu["lenh_diff"], "volume": cap_hien_tai.get('volume_diff', 0.01), "comment": order_comment}))
+                            # 👉 TẠO TOKEN GIAO VIỆC SIÊU MẠNH (JOB ID)
+                            job_uuid = str(uuid.uuid4()).split('-')[0].upper() # Lấy 8 ký tự VD: 8A4D9B2
+                            job_id = f"J_{job_uuid}"
+                            
+                            pipe = r.pipeline()
+                            
+                            # Gửi lệnh KÈM THEO JOB_ID để YÊU CẦU WORKER REPORT BACK
+                            context_vao = {
+                                "job_id": job_id, "pair_id": args.pair_id,
+                                "chenh_vao": tin_hieu['chenh_lech'], "tinh_chat_vao": loai_tinh_chat,
+                                # Kẹp thêm thông số Accountant
+                                "tick_hz_base_in": tick_base.get("tick_hz", 0),
+                                "tick_hz_diff_in": tick_diff.get("tick_hz", 0)
+                            }
+                            
+                            pipe.lpush(f"QUEUE:ORDER:{cap_hien_tai['base_exchange'].upper()}", json.dumps({
+                                "action": tin_hieu["lenh_base"], "volume": cap_hien_tai.get('volume_base', 0.01), "comment": order_comment,
+                                "role": "BASE", "context": context_vao
+                            }))
+                            pipe.lpush(f"QUEUE:ORDER:{cap_hien_tai['diff_exchange'].upper()}", json.dumps({
+                                "action": tin_hieu["lenh_diff"], "volume": cap_hien_tai.get('volume_diff', 0.01), "comment": order_comment,
+                                "role": "DIFF", "context": context_vao
+                            }))
+                            pipe.execute()
                             
                             thoi_diem_vao_lenh_cuoi = time.time() 
                             da_xu_ly_vao_lenh_cho_tick_nay = True 

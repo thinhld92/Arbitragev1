@@ -4,7 +4,9 @@ import ujson as json
 import time
 import argparse
 import os
-import threading 
+import threading
+from collections import deque
+from concurrent.futures import ThreadPoolExecutor
 from utils.terminal import dan_tran_cua_so
 
 # ==========================================
@@ -57,6 +59,7 @@ QUEUE_ORDER_KEY = f"QUEUE:ORDER:{args.broker.upper()}"
 QUEUE_TELEGRAM = "TELEGRAM_QUEUE"
 
 mt5_lock = threading.Lock()
+executor = ThreadPoolExecutor(max_workers=5) # ⚡ Sử dụng Pool 5 chiến binh túc trực
 
 # ==========================================
 # KHỞI TẠO KẾT NỐI MT5
@@ -244,9 +247,29 @@ def thuc_thi_chi_thi(chi_thi, current_tick):
             
         if result.retcode == mt5.TRADE_RETCODE_DONE:
             print(f"🔫 {bot_name} ĐÃ BẮN {action} {volume} LOT. Ticket: {result.order}")
+            
+            # 👉 BÁO CÁO KẾT QUẢ GIAO VIỆC LÊN CHO KẾ TOÁN (JOB_ID)
+            context = chi_thi.get("context", {})
+            job_id = context.get("job_id")
+            if job_id:
+                report = {
+                    "job_id": job_id,
+                    "role": chi_thi.get("role", "UNKNOWN"),
+                    "ticket": result.order,
+                    "chenh_vao": context.get("chenh_vao", 0),
+                    "tinh_chat_vao": context.get("tinh_chat_vao", "UNKNOWN"),
+                    # Kẹp thêm các thông số cấu hình và Hz cho Kế toán
+                    "tick_hz_base_in": context.get("tick_hz_base_in", 0),
+                    "tick_hz_diff_in": context.get("tick_hz_diff_in", 0)
+                }
+                # Gửi báo cáo vào hòm thư riêng của cặp này
+                pair_id = context.get("pair_id")
+                if pair_id:
+                    r_lpush(f"QUEUE:ORDER_RESULT:{pair_id}", json_dumps(report))
+                    
         else:
             print(f"❌ {bot_name} LỖI VÀO LỆNH {action}: {result.comment} ({result.retcode})")
-            r.lpush(QUEUE_TELEGRAM, f"❌ <b>{bot_name} LỖI {action}</b>\nMã lỗi: {result.retcode} - {result.comment}")
+            r_lpush(QUEUE_TELEGRAM, f"❌ <b>{bot_name} LỖI {action}</b>\nMã lỗi: {result.retcode} - {result.comment}")
 
     elif action == "CLOSE_OLDEST":
         count = chi_thi.get("count", 1)
@@ -257,7 +280,7 @@ def thuc_thi_chi_thi(chi_thi, current_tick):
             lenh_can_dong = lenh_sap_xep[:count] 
             
             for pos in lenh_can_dong:
-                threading.Thread(target=thuc_thi_dong_1_lenh, args=(positions[0], current_tick, comment, chi_thi)).start()
+                executor.submit(thuc_thi_dong_1_lenh, pos, current_tick, comment, chi_thi)
 
     # 👉 THÊM CHIÊU CHÉM ĐÍCH DANH VÀO DƯỚI CÙNG HÀM thuc_thi_chi_thi
     elif action == "CLOSE_BY_TICKET":
@@ -266,12 +289,12 @@ def thuc_thi_chi_thi(chi_thi, current_tick):
         positions = mt5.positions_get(ticket=ticket_can_dong) 
         if positions:
             # Tìm thấy thì ném cho Thread phụ đi chém
-            threading.Thread(target=thuc_thi_dong_1_lenh, args=(positions[0], current_tick, comment, chi_thi)).start()
+            executor.submit(thuc_thi_dong_1_lenh, positions[0], current_tick, comment, chi_thi)
         else:
             print(f"⚠️ {bot_name} Lệnh tử hình Ticket #{ticket_can_dong} thất bại do không tìm thấy lệnh trên sàn (Đã bị StopOut trước đó?)")
 
     elif action == "FETCH_HISTORY_ONLY":
-        threading.Thread(target=thuc_thi_dong_bo_lich_su, args=(chi_thi,)).start()
+        executor.submit(thuc_thi_dong_bo_lich_su, chi_thi)
 # ==========================================
 # 3. VÒNG LẶP CHIẾN TRANH (MAIN LOOP)
 # ==========================================
@@ -281,10 +304,25 @@ dang_co_mang = True
 
 thoi_gian_check_tk_cuoi = 0 
 equity_canh_bao_da_gui = False
+last_len_positions = -1
+
+# Tối ưu biến cục bộ để gọi hàm nhanh hơn
+time_time = time.time
+sleep = time.sleep
+json_dumps = json.dumps
+r_set = r.set
+r_rpop = r.rpop
+r_lpush = r.lpush
+mt5_symbol_info_tick = mt5.symbol_info_tick
+mt5_positions_get = mt5.positions_get
+mt5_account_info = mt5.account_info
+
+# Khay đếm Tick 60 giây (Sliding Window)
+tick_history = deque()
 
 try:
     while True:
-        now = time.time()
+        now = time_time()
         
         # 🛡️ KIỂM TRA MẠNG VÀ NÚT ALGO TRADING
         if now - thoi_gian_check_mang_cuoi > 1.0:
@@ -301,52 +339,64 @@ try:
                 print(f"⛔ {bot_name} ĐẠI CA QUÊN BẬT NÚT 'ALGO TRADING' TRÊN MT5! Bot đang khóa nòng...", end='\r')
 
         # 📈 LẤY GIÁ VÀ CẬP NHẬT TICK
-        tick = mt5.symbol_info_tick(args.symbol)
+        tick = mt5_symbol_info_tick(args.symbol)
 
         if tick is not None:
+            # 👉 Lọc rác Sliding Window 60s (Chạy liên tục dù có tick mới hay không)
+            while tick_history and now - tick_history[0] > 60.0:
+                tick_history.popleft()
+                
+            tick_count_60s = len(tick_history)
+            
             if tick.time_msc != last_tick_time:
+                tick_history.append(now)
+                tick_count_60s = len(tick_history) # Tính lại sau khi append
+                
                 tick_data = {
                     "bid": tick.bid,
                     "ask": tick.ask,
                     "time_msc": tick.time_msc,
-                    "connected": dang_co_mang 
+                    "connected": dang_co_mang,
+                    "tick_hz": tick_count_60s # Mật độ nhảy giá 1 phút qua
                 }
-                r.set(REDIS_TICK_KEY, json.dumps(tick_data))
+                r_set(REDIS_TICK_KEY, json_dumps(tick_data))
                 
                 trang_thai_mang = "OK" if dang_co_mang else "RỚT"
-                print(f"{bot_name} BID: {tick.bid} | ASK: {tick.ask} | Mạng: {trang_thai_mang}   ", end='\r')
+                print(f"{bot_name} BID: {tick.bid} | ASK: {tick.ask} | Mạng: {trang_thai_mang} | {tick_count_60s} t/p", end='\r')
                 
                 last_tick_time = tick.time_msc
                 
-            thu_tu_master = r.rpop(QUEUE_ORDER_KEY)
+            thu_tu_master = r_rpop(QUEUE_ORDER_KEY)
             if thu_tu_master:
                 chi_thi = json.loads(thu_tu_master)
                 print(f"\n📨 {bot_name} Nhận lệnh từ Master: {chi_thi}")
-                threading.Thread(target=thuc_thi_chi_thi, args=(chi_thi, tick)).start()
+                executor.submit(thuc_thi_chi_thi, chi_thi, tick)
                 
         else:
             mt5.symbol_select(args.symbol, True)
-            time.sleep(1)
+            sleep(1)
             
         # 🧮 CẬP NHẬT TÀI KHOẢN VÀ DANH SÁCH TICKET
         if now - thoi_gian_check_tk_cuoi > 0.2:
-            positions = mt5.positions_get(symbol=args.symbol)
-            if positions:
-                # Trích xuất ticket và thời gian tạo lệnh thành mảng JSON
-                danh_sach_ticket = [{"ticket": pos.ticket, "time_msc": pos.time_msc} for pos in positions]
-            else:
-                danh_sach_ticket = []
+            positions = mt5_positions_get(symbol=args.symbol)
             
-            # Đẩy nguyên mảng JSON lên Redis thay vì 1 con số
-            r.set(REDIS_POS_KEY, json.dumps(danh_sach_ticket))
-            
-            acc_info = mt5.account_info()
+            # CHỈ ĐẨY LÊN REDIS KHI SỐ LƯỢNG LỆNH THAY ĐỔI
+            current_len = len(positions) if positions else 0
+            if current_len != last_len_positions:
+                if positions:
+                    danh_sach_ticket = [{"ticket": pos.ticket, "time_msc": pos.time_update_msc if hasattr(pos, 'time_update_msc') else pos.time_msc} for pos in positions]
+                else:
+                    danh_sach_ticket = []
+                r_set(REDIS_POS_KEY, json_dumps(danh_sach_ticket))
+                last_len_positions = current_len
+
+            acc_info = mt5_account_info()
             if acc_info:
-                r.set(REDIS_EQUITY_KEY, acc_info.equity)
+                r_set(REDIS_EQUITY_KEY, acc_info.equity)
                 
                 if acc_info.equity < alert_equity and not equity_canh_bao_da_gui:
                     msg = f"⚠️ <b>{bot_name} CẢNH BÁO LOW EQUITY</b>\nTài khoản đang có {acc_info.equity:.2f}$, chạm mức cảnh báo ({alert_equity}$). Vui lòng nạp thêm tiền!"
-                    r.lpush(QUEUE_TELEGRAM, msg)
+                    r_lpush(QUEUE_TELEGRAM, msg)
                     print(f"\n{msg}")
                     equity_canh_bao_da_gui = True
                 
@@ -355,8 +405,9 @@ try:
                     
             thoi_gian_check_tk_cuoi = now
 
-        time.sleep(0.001)
+        sleep(0.001)
 
 except KeyboardInterrupt:
     print(f"\n🛑 {bot_name} Đã dừng an toàn.")
+    executor.shutdown(wait=False) # Dọn dẹp Pool
     mt5.shutdown()
