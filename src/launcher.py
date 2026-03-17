@@ -1,5 +1,5 @@
-import json
-# import ujson as json
+# import json
+import ujson as json
 import subprocess
 import time
 import os

@@ -19,11 +19,25 @@ os.makedirs(history_dir, exist_ok=True)
 
 # Trí nhớ tạm thời để chờ ghép Biên lai của 2 sàn
 pending_receipts = {}
+last_cleanup_time = time.time()
 
 print("👓 Kế Toán Trưởng đã vào vị trí. Sẵn sàng ghi sổ...")
 
 while True:
     try:
+        # 🛡️ POT-2 FIX: Dọn rác pending_receipts quá 5 phút (tránh memory leak)
+        now = time.time()
+        if now - last_cleanup_time > 60:
+            expired_tokens = [token for token, data in pending_receipts.items() 
+                            if isinstance(data, dict) and any(
+                                isinstance(v, dict) and now - v.get('_received_at', now) > 300 
+                                for v in data.values()
+                            )]
+            for token in expired_tokens:
+                print(f"🗑️ Dọn rác: Xóa biên lai mồ côi {token} (quá 5 phút)")
+                del pending_receipts[token]
+            last_cleanup_time = now
+        
         data_raw = r.brpop("QUEUE:ACCOUNTANT", timeout=1)
         if data_raw:
             bien_lai = json.loads(data_raw[1])
@@ -33,7 +47,8 @@ while True:
             
             if not pair_token or not role: continue
             
-            # Lưu tạm vào khay
+            # Lưu tạm vào khay (kèm timestamp)
+            bien_lai['_received_at'] = time.time()
             if pair_token not in pending_receipts:
                 pending_receipts[pair_token] = {}
             pending_receipts[pair_token][role] = bien_lai
@@ -123,7 +138,10 @@ while True:
                     
                 except PermissionError:
                     print(f"⚠️ {datetime.now().strftime('%H:%M:%S')} ERROR: KHÔNG THỂ GHI FILE. ĐẠI CA ĐANG MỞ EXCEL PHẢI KHÔNG? ĐÓNG FILE ĐI RỒI BOT GHI TIẾP! 😡")
-                    r.lpush("QUEUE:ACCOUNTANT", json.dumps(bien_lai)) # Đẩy lại vào hàng đợi chờ ghi sau
+                    # 🛡️ POT-6 FIX: Đẩy LẠI TẤT CẢ biên lai của cặp này vào queue
+                    for saved_role, saved_data in pending_receipts[pair_token].items():
+                        r.lpush("QUEUE:ACCOUNTANT", json.dumps(saved_data))
+                    del pending_receipts[pair_token]  # Xóa khỏi pending để tránh trùng
                     time.sleep(2)
                 
     except Exception as e:

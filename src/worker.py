@@ -52,6 +52,13 @@ except KeyError:
 # Tối ưu Redis
 r = redis.Redis(host=redis_conf['host'], port=redis_conf['port'], db=redis_conf['db'], decode_responses=True, health_check_interval=30)
 
+# 🛡️ Kiểm tra kết nối Redis ngay lập tức (Fail-fast)
+try:
+    r.ping()
+except redis.ConnectionError:
+    print(f"❌ Không kết nối được Redis tại {redis_conf['host']}:{redis_conf['port']}! Hãy kiểm tra Redis server.")
+    quit()
+
 REDIS_TICK_KEY = f"TICK:{args.broker.upper()}:{args.symbol.upper()}"
 REDIS_POS_KEY = f"POSITION:{args.broker.upper()}:{args.symbol.upper()}"
 REDIS_EQUITY_KEY = f"ACCOUNT:{args.broker.upper()}:EQUITY"
@@ -227,7 +234,6 @@ def thuc_thi_chi_thi(chi_thi, current_tick):
         is_buy = (action == "BUY")
         order_type = mt5.ORDER_TYPE_BUY if is_buy else mt5.ORDER_TYPE_SELL
         price = current_tick.ask if is_buy else current_tick.bid
-
         request = {
             "action": mt5.TRADE_ACTION_DEAL,
             "symbol": args.symbol,

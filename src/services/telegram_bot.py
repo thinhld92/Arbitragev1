@@ -75,7 +75,10 @@ thoi_gian_gui_cuoi = 0
 try:
     while True:
         # 1. Chờ lấy lỗi đầu tiên (Sẽ đứng im ở đây nếu không có lỗi, KHÔNG tốn CPU)
-        queue_name, first_msg = r.blpop(QUEUE_TELEGRAM, timeout=0)
+        result = r.blpop(QUEUE_TELEGRAM, timeout=5)
+        if result is None:
+            continue  # 🛡️ POT-5 FIX: Tránh crash khi timeout hoặc mất kết nối Redis
+        queue_name, first_msg = result
         
         now = time.time()
         

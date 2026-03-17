@@ -66,6 +66,10 @@ if cap_hien_tai is None:
 
 key_base = f"TICK:{cap_hien_tai['base_exchange'].upper()}:{cap_hien_tai['base_symbol'].upper()}"
 key_diff = f"TICK:{cap_hien_tai['diff_exchange'].upper()}:{cap_hien_tai['diff_symbol'].upper()}"
+key_pos_base = f"POSITION:{cap_hien_tai['base_exchange'].upper()}:{cap_hien_tai['base_symbol'].upper()}"
+key_pos_diff = f"POSITION:{cap_hien_tai['diff_exchange'].upper()}:{cap_hien_tai['diff_symbol'].upper()}"
+key_equity_base = f"ACCOUNT:{cap_hien_tai['base_exchange'].upper()}:EQUITY"
+key_equity_diff = f"ACCOUNT:{cap_hien_tai['diff_exchange'].upper()}:EQUITY"
 key_state = f"STATE:MASTER:{args.pair_id}" 
 
 dev_entry = cap_hien_tai['deviation_entry']
@@ -77,6 +81,7 @@ max_orders = cap_hien_tai['max_orders']
 hold_time_sec = cap_hien_tai.get('hold_time', 180)
 alert_equity = cap_hien_tai.get('alert_equity', 0)
 stable_mode = cap_hien_tai.get('stable_mode', 'freeze')
+max_tick_delay = cap_hien_tai.get('max_tick_delay', 5.0)
 
 # 👉 LẤY BỘ LỌC TỪ CONFIG
 filter_entry = cap_hien_tai.get('filter_entry', 'nguoc') 
@@ -258,10 +263,6 @@ try:
             # ========================================================
             # 🛡️ 2. CHECK WORKER ALIVE & DỊCH JSON SỔ SÁCH 
             # ========================================================
-            key_pos_base = f"POSITION:{cap_hien_tai['base_exchange'].upper()}:{cap_hien_tai['base_symbol'].upper()}"
-            key_pos_diff = f"POSITION:{cap_hien_tai['diff_exchange'].upper()}:{cap_hien_tai['diff_symbol'].upper()}"
-            key_equity_base = f"ACCOUNT:{cap_hien_tai['base_exchange'].upper()}:EQUITY"
-            key_equity_diff = f"ACCOUNT:{cap_hien_tai['diff_exchange'].upper()}:EQUITY"
             
             pos_base_raw, pos_diff_raw, tick_base_raw, tick_diff_raw, eq_base_raw, eq_diff_raw = r.mget(
                 key_pos_base, key_pos_diff, key_base, key_diff, key_equity_base, key_equity_diff
@@ -538,6 +539,7 @@ try:
                         co_lenh_bi_tram = True
                         if time.time() - thoi_diem_spam_tram_cuoi > 60:
                             r.lpush("TELEGRAM_QUEUE", f"🔪 <b>{master_name} - AUTO-CUT (ORPHAN)</b>\n{msg}")
+                            thoi_diem_spam_tram_cuoi = time.time()
                             
                     for ud in unpaired_diff:
                         msg = f"🚨 [MỒ CÔI {args.pair_id}] Lệnh lạ mặt Diff #{ud['ticket']}! Trảm!"
@@ -563,6 +565,7 @@ try:
                         co_lenh_bi_tram = True
                         if time.time() - thoi_diem_spam_tram_cuoi > 60:
                             r.lpush("TELEGRAM_QUEUE", f"🔪 <b>{master_name} - AUTO-CUT (ORPHAN)</b>\n{msg}")
+                            thoi_diem_spam_tram_cuoi = time.time()
 
                 # Khởi động lại khiên bảo vệ nếu có vung đao
                 if co_lenh_bi_tram:
@@ -727,7 +730,7 @@ try:
                                 # Chỉ kích hoạt lọc nếu đã lưu giá mốc VÀ chế độ khác 'none'
                                 if gia_base_luc_bat_dau_lech_dong > 0 and filter_close != 'none':
                                     chenh_lech_gia_hien_tai = tick_base['bid'] - gia_base_luc_bat_dau_lech_dong
-                                    lenh_dong_cua_thang_cham = "BUY" if huong_dang_danh == "BUY" else "SELL"
+                                    lenh_dong_cua_thang_cham = "BUY" if huong_dang_danh == "TH2" else "SELL"
                                     
                                     if chenh_lech_gia_hien_tai > 0: # 🚀 GIÁ BASE ĐANG VỌT TĂNG
                                         if filter_close == 'thuan' and lenh_dong_cua_thang_cham == "BUY": 
