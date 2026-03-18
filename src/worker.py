@@ -145,7 +145,7 @@ def thuc_thi_dong_1_lenh(pos, current_tick, comment, chi_thi):
         "type_time": mt5.ORDER_TIME_GTC,
         "type_filling": CACHED_FILLING_MODE,
     }
-    if comment: request["comment"] = comment
+    # if comment: request["comment"] = comment
     
     with mt5_lock: 
         result = mt5.order_send(request)
@@ -245,8 +245,7 @@ def thuc_thi_chi_thi(chi_thi, current_tick):
             "type_time": mt5.ORDER_TIME_GTC,
             "type_filling": CACHED_FILLING_MODE,  # <--- SỬ DỤNG CACHE
         }
-        if comment:
-            request["comment"] = comment
+        # if comment: request["comment"] = comment
         
         with mt5_lock: 
             result = mt5.order_send(request)
