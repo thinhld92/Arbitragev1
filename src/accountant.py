@@ -18,8 +18,15 @@ if hwnd:
 with open('config.json', 'r', encoding='utf-8') as f:
     config = json.load(f)
 
-r = redis.Redis(host=config['redis']['host'], port=config['redis']['port'], db=config['redis']['db'], decode_responses=True)
-
+r = redis.Redis(
+    host=config['redis']['host'], 
+    port=config['redis']['port'], 
+    db=config['redis']['db'], 
+    decode_responses=True,
+    health_check_interval=30,   # ⚡ Tự động Ping để giữ kết nối
+    socket_timeout=5.0,         # ⚡ Quá 5s rớt mạng tự văng lỗi để lặp lại
+    socket_connect_timeout=5.0
+)
 history_dir = "history"
 os.makedirs(history_dir, exist_ok=True)
 
