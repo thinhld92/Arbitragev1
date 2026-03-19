@@ -79,10 +79,10 @@ for cap in danh_sach_cap:
 print("\n🧠 ĐANG ĐÁNH THỨC KẾ TOÁN TRƯỞNG (ACCOUNTANT)...")
 for cap in danh_sach_cap:
     pair_id = cap['id']
-    print(f"   👉 Đang gọi Accountant cho cặp: {pair_id} (Chế độ thu nhỏ)")
+    print(f"   👉 Đang gọi Accountant cho cặp: {pair_id} (Hiển thị cột phải)")
     
     # 👉 Tuyệt chiêu: Truyền nguyên 1 chuỗi string và bật shell=True
-    command = f'start "KETOAN_{pair_id}" /min cmd /k python src/accountant.py --pair_id {pair_id}'
+    command = f'start "KETOAN_{pair_id}" cmd /k python src/accountant.py --pair_id {pair_id}'
     subprocess.Popen(command, shell=True)
     
     time.sleep(2)

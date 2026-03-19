@@ -43,7 +43,7 @@ try:
     
     # 🌟 LẤY TÊN VPS VÀ GẮN BIỂN SỐ CHO WORKER
     vps_name = config.get('vps_name', 'LOCAL') 
-    bot_name = f"[{vps_name} | {args.broker} | {args.symbol}]"
+    bot_name = f"[{vps_name}|{args.broker}|{args.symbol}]"
 
 except KeyError:
     print(f"❌ Lỗi: Không tìm thấy cấu hình cho sàn {args.broker} trong config.json")
@@ -367,14 +367,14 @@ try:
                 r_set(REDIS_TICK_KEY, json_dumps(tick_data))
                 
                 trang_thai_mang = "OK" if dang_co_mang else "RỚT"
-                print(f"{bot_name} BID: {tick.bid} | ASK: {tick.ask} | Mạng: {trang_thai_mang} | {tick_count_60s} t/p", end='\r')
+                print(f"{bot_name} B: {tick.bid} | A: {tick.ask} | M: {trang_thai_mang} | {tick_count_60s} t/p", end='\r')
                 
                 last_tick_time = tick.time_msc
                 
             thu_tu_master = r_rpop(QUEUE_ORDER_KEY)
             if thu_tu_master:
                 chi_thi = json.loads(thu_tu_master)
-                print(f"\n📨 {bot_name} Nhận lệnh từ Master: {chi_thi}")
+                # print(f"\n📨 {bot_name} Nhận lệnh từ Master: {chi_thi}")
                 executor.submit(thuc_thi_chi_thi, chi_thi, tick)
                 
         else:
