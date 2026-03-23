@@ -24,3 +24,5 @@ src/utils/__pycache__/
 # File cấu hình chứa API Key / Password (Nên tạo config.example.json để push lên thay thế)
 config.json
 toan_bo_code.txt
+
+REDIS_DUMP*.txt
