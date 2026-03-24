@@ -31,7 +31,9 @@
     "deviation_entry": "mức chênh lệch để VÀO lệnh (vd 0.20 giá)",
     "max_orphan_count": "Số lần vào lệnh hụt (mồ côi) LIÊN TIẾP tối đa trước khi sập cầu dao",
     "orphan_cooldown_second": "Thời gian khóa không cho vào lệnh mới khi sập cầu dao (giây)",
-    "stable_mode": "Chọn 'freeze' (đợi giá đứng im) hoặc 'continuous' (giá giật thoải mái nhưng độ lệch phải duy trì liên tục)"
+    "stable_mode": "Chọn 'freeze' (đợi giá đứng im) hoặc 'continuous' (giá giật thoải mái nhưng độ lệch phải duy trì liên tục)",
+    "max_tick_hz_base": "Ngưỡng mật độ tick/phút tối đa của sàn Base. Vượt -> khóa nòng (0 = tắt)",
+    "max_tick_hz_diff": "Ngưỡng mật độ tick/phút tối đa của sàn Diff. Vượt -> khóa nòng (0 = tắt)"
   },
   "danh_sach_cap": [
     {
@@ -58,7 +60,9 @@
       "trading_hours": ["00:05-12:00", "16:10-19:30"],
       "force_close_hours": ["20:00-20:05"],
       "max_orphan_count": 3,
-      "orphan_cooldown_second": 1800
+      "orphan_cooldown_second": 1800,
+      "max_tick_hz_base": 0,
+      "max_tick_hz_diff": 0
     }
   ],
   "vps_name": "local",

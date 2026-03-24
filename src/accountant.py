@@ -48,35 +48,81 @@ print(SEPARATOR_LINE)
 
 print_counter = 0
 
+# 🛑 Tín hiệu tắt bot an toàn
+SHUTDOWN_KEY = "SIGNAL:SHUTDOWN"
+last_shutdown_check = 0
+dang_shutdown = False
+
 while True:
     try:
-        # 🛡️ POT-2 FIX: Dọn rác pending_receipts quá 5 phút (tránh memory leak)
+        # 🛑 CHECK TÍN HIỆU TẮT BOT AN TOÀN (mỗi 1 giây)
         now = time.time()
-        if now - last_cleanup_time > 60:
-            expired_tokens = [token for token, data in pending_receipts.items() 
-                            if isinstance(data, dict) and any(
-                                isinstance(v, dict) and now - v.get('_received_at', now) > 300 
-                                for v in data.values()
-                            )]
-            for token in expired_tokens:
-                print(f"Dọn rác: Xóa biên lai mồ côi {token} (quá 5 phút)")
+        if now - last_shutdown_check > 1.0:
+            last_shutdown_check = now
+            if r.get(SHUTDOWN_KEY):
+                dang_shutdown = True
+                print(f"\n🛑 [SHUTDOWN] Kế toán nhận tín hiệu tắt! Rút hết biên lai còn lại...")
+        
+        # 🛡️ TIMEOUT GHÉP CẶP: Nếu biên lai chờ quá 30s mà không ghép được → xử lý luôn 1 bên
+        if now - last_cleanup_time > 10:
+            timeout_tokens = []
+            for token, data in pending_receipts.items():
+                if isinstance(data, dict):
+                    for role_key, v in data.items():
+                        if isinstance(v, dict) and now - v.get('_received_at', now) > 30:
+                            timeout_tokens.append(token)
+                            break
+            
+            for token in timeout_tokens:
+                roles_co = list(pending_receipts[token].keys())
+                print(f"⏰ [TIMEOUT] Biên lai {token} chờ quá 30s (có: {roles_co}). Xử lý luôn!")
+                
+                # Lấy 1 bên có sẵn để đánh dấu is_single_cut và xử lý
+                for role_key in roles_co:
+                    receipt = pending_receipts[token][role_key]
+                    ctx = receipt.get("context", {})
+                    ctx["is_single_cut"] = True
+                    ctx["action_type"] = ctx.get("action_type", "TIMEOUT_SINGLE")
+                    ctx["mode_dong"] = ctx.get("mode_dong", "[TIMEOUT]")
+                    receipt["context"] = ctx
+                    # Đẩy lại vào queue để xử lý qua flow bình thường
+                    r.lpush("QUEUE:ACCOUNTANT", json.dumps(receipt))
+                
                 del pending_receipts[token]
+            
             last_cleanup_time = now
         
-        data_raw = r.brpop("QUEUE:ACCOUNTANT", timeout=1)
+        if dang_shutdown:
+            # Chế độ Drain: Rút biên lai không chờ (rpop thay vì brpop)
+            data_raw_value = r.rpop("QUEUE:ACCOUNTANT")
+            if data_raw_value:
+                data_raw = ("QUEUE:ACCOUNTANT", data_raw_value)
+            else:
+                # Hết biên lai rồi → thoát
+                print(f"✅ Kế toán đã ghi sổ xong toàn bộ. Thoát an toàn!")
+                print(f"👋 Kế Toán Trưởng đã nghỉ việc.")
+                break
+        else:
+            data_raw = r.brpop("QUEUE:ACCOUNTANT", timeout=1)
         if data_raw:
             bien_lai = json.loads(data_raw[1])
             ctx = bien_lai.get("context", {})
             pair_token = ctx.get("pair_token")
             role = bien_lai.get("role")
             
-            if not pair_token or not role: continue
+            if not pair_token or not role:
+                print(f"⚠️ [DEBUG] Biên lai THIẾU DỮ LIỆU! pair_token={pair_token}, role={role}")
+                continue
             
             # Lưu tạm vào khay (kèm timestamp)
             bien_lai['_received_at'] = time.time()
             if pair_token not in pending_receipts:
                 pending_receipts[pair_token] = {}
             pending_receipts[pair_token][role] = bien_lai
+            
+            # 🔍 [DEBUG] Log mỗi khi nhận biên lai
+            print(f"📩 [DEBUG] Nhận biên lai: {role} | Token: {pair_token[:30]} | Ticket: {bien_lai.get('ticket')}")
+            print(f"   Pending keys: {list(pending_receipts.keys())}")
             
             # KHI NHẬN ĐƯỢC BIÊN LAI, KIỂM TRA XEM CÓ PHẢI LÀ ÁN TRẢM ĐƠN KHÔNG
             is_single = ctx.get("is_single_cut", False)

@@ -49,6 +49,9 @@ QUEUE_TELEGRAM = "TELEGRAM_QUEUE"
 
 print("✅ Đã kết nối Redis! Đang chờ thông báo lỗi...")
 
+# 🛑 Tín hiệu tắt bot an toàn
+SHUTDOWN_KEY = "SIGNAL:SHUTDOWN"
+
 # ==========================================
 # 2. HÀM GỬI TIN NHẮN API
 # ==========================================
@@ -77,6 +80,11 @@ try:
         # 1. Chờ lấy lỗi đầu tiên (Sẽ đứng im ở đây nếu không có lỗi, KHÔNG tốn CPU)
         result = r.blpop(QUEUE_TELEGRAM, timeout=5)
         if result is None:
+            # 🛑 CHECK TÍN HIỆU TẮT BOT AN TOÀN khi không có tin nhắn
+            if r.get(SHUTDOWN_KEY):
+                print(f"\n🛑 [SHUTDOWN] Telegram Service nhận tín hiệu tắt!")
+                print(f"👋 Telegram Service đã nghỉ việc.")
+                break
             continue  # 🛡️ POT-5 FIX: Tránh crash khi timeout hoặc mất kết nối Redis
         queue_name, first_msg = result
         

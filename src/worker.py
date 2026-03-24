@@ -127,6 +127,18 @@ else:
     quit()
 
 # ==========================================
+# HÀM HỖ TRỢ: BỌc ThreadPool chống nuốt exception
+# ==========================================
+def safe_submit(fn, *args):
+    future = executor.submit(fn, *args)
+    def _check(f):
+        ex = f.exception()
+        if ex:
+            print(f"\n🔥 [THREAD CRASH] {fn.__name__}: {ex}")
+    future.add_done_callback(_check)
+    return future
+
+# ==========================================
 # HÀM HỖ TRỢ: ĐÓNG 1 LỆNH (DÙNG CHO THREAD)
 # ==========================================
 def thuc_thi_dong_1_lenh(pos, current_tick, comment, chi_thi):
@@ -185,11 +197,32 @@ def thuc_thi_dong_1_lenh(pos, current_tick, comment, chi_thi):
                 "context": chi_thi.get("context", {}) 
             }
             r.lpush("QUEUE:ACCOUNTANT", json.dumps(bien_lai))
+            print(f"📤 [DEBUG] Đã gửi biên lai đóng lệnh #{pos.ticket} cho Kế toán | Role: {chi_thi.get('role')} | Token: {chi_thi.get('context', {}).get('pair_token', 'N/A')[:30]}")
         else:
-            print(f"⚠️ {bot_name} Báo động: Lệnh #{pos.ticket} đã đóng nhưng MT5 không nhả lịch sử sau 5s!")
+            # 🛡️ VẪN GỬi biên lai (profit=0) để accountant không bị kẹt chờ
+            print(f"⚠️ {bot_name} Lệnh #{pos.ticket} đã đóng nhưng MT5 không nhả lịch sử sau 5s! Gửi biên lai rỗng.")
+            bien_lai = {
+                "role": chi_thi.get("role", "UNKNOWN"),
+                "ticket": pos.ticket,
+                "volume": pos.volume,
+                "profit": 0, "fee": 0,
+                "open_price": 0, "close_price": 0,
+                "context": chi_thi.get("context", {})
+            }
+            r.lpush("QUEUE:ACCOUNTANT", json.dumps(bien_lai))
             
     else:
+        # 🛡️ VẪN GỬi biên lai khi lệnh đóng FAIL để accountant không kẹt
         print(f"❌ {bot_name} LỖI ĐÓNG LỆNH #{pos.ticket}: {result.comment}")
+        bien_lai = {
+            "role": chi_thi.get("role", "UNKNOWN"),
+            "ticket": pos.ticket,
+            "volume": pos.volume,
+            "profit": 0, "fee": 0,
+            "open_price": 0, "close_price": 0,
+            "context": chi_thi.get("context", {})
+        }
+        r.lpush("QUEUE:ACCOUNTANT", json.dumps(bien_lai))
         r.lpush(QUEUE_TELEGRAM, f"❌ <b>{bot_name} LỖI ĐÓNG LỆNH</b>\nTicket: #{pos.ticket} | Lỗi: {result.comment}")
 
 # ==========================================
@@ -220,7 +253,16 @@ def thuc_thi_dong_bo_lich_su(chi_thi):
         r.lpush("QUEUE:ACCOUNTANT", json.dumps(bien_lai))
         print(f"✅ Đã gửi hồ sơ đối soát của #{ticket} cho Kế toán!")
     else:
-        print(f"⚠️ Không tìm thấy dữ liệu lịch sử của #{ticket} trên MT5!")
+        # 🛡️ VẪN GỬi biên lai rỗng khi không tìm thấy lịch sử
+        print(f"⚠️ Không tìm thấy lịch sử của #{ticket}. Gửi biên lai rỗng.")
+        bien_lai = {
+            "role": chi_thi.get("role", "UNKNOWN"),
+            "ticket": ticket,
+            "volume": 0, "profit": 0, "fee": 0,
+            "open_price": 0, "close_price": 0,
+            "context": chi_thi.get("context", {})
+        }
+        r.lpush("QUEUE:ACCOUNTANT", json.dumps(bien_lai))
 
 # ==========================================
 # HÀM BÓP CÒ CHÍNH (PHÂN LOẠI LỆNH)
@@ -285,7 +327,7 @@ def thuc_thi_chi_thi(chi_thi, current_tick):
             lenh_can_dong = lenh_sap_xep[:count] 
             
             for pos in lenh_can_dong:
-                executor.submit(thuc_thi_dong_1_lenh, pos, current_tick, comment, chi_thi)
+                safe_submit(thuc_thi_dong_1_lenh, pos, current_tick, comment, chi_thi)
 
     # 👉 THÊM CHIÊU CHÉM ĐÍCH DANH VÀO DƯỚI CÙNG HÀM thuc_thi_chi_thi
     elif action == "CLOSE_BY_TICKET":
@@ -294,12 +336,23 @@ def thuc_thi_chi_thi(chi_thi, current_tick):
         positions = mt5.positions_get(ticket=ticket_can_dong) 
         if positions:
             # Tìm thấy thì ném cho Thread phụ đi chém
-            executor.submit(thuc_thi_dong_1_lenh, positions[0], current_tick, comment, chi_thi)
+            safe_submit(thuc_thi_dong_1_lenh, positions[0], current_tick, comment, chi_thi)
         else:
-            print(f"⚠️ {bot_name} Lệnh tử hình Ticket #{ticket_can_dong} thất bại do không tìm thấy lệnh trên sàn (Đã bị StopOut trước đó?)")
+            # 🛡️ VẪN GỬi biên lai khi position không tồn tại để accountant không kẹt
+            print(f"⚠️ {bot_name} Ticket #{ticket_can_dong} không tìm thấy trên sàn. Gửi biên lai rỗng.")
+            bien_lai = {
+                "role": chi_thi.get("role", "UNKNOWN"),
+                "ticket": ticket_can_dong,
+                "volume": 0, "profit": 0, "fee": 0,
+                "open_price": 0, "close_price": 0,
+                "context": chi_thi.get("context", {})
+            }
+            r.lpush("QUEUE:ACCOUNTANT", json.dumps(bien_lai))
 
     elif action == "FETCH_HISTORY_ONLY":
-        executor.submit(thuc_thi_dong_bo_lich_su, chi_thi)
+        safe_submit(thuc_thi_dong_bo_lich_su, chi_thi)
+
+
 # ==========================================
 # 3. VÒNG LẶP CHIẾN TRANH (MAIN LOOP)
 # ==========================================
@@ -325,6 +378,11 @@ mt5_account_info = mt5.account_info
 # Khay đếm Tick 60 giây (Sliding Window)
 tick_history = deque()
 
+# 🛑 Tín hiệu tắt bot an toàn
+SHUTDOWN_KEY = "SIGNAL:SHUTDOWN"
+last_shutdown_check = 0
+dang_shutdown = False
+
 try:
     while True:
         now = time_time()
@@ -335,6 +393,17 @@ try:
             # Có mạng VÀ phải đang bật nút Algo Trading thì mới tính là OK
             dang_co_mang = terminal_info.connected and terminal_info.trade_allowed if terminal_info else False
             thoi_gian_check_mang_cuoi = now
+            
+            # 🛑 CHECK TÍN HIỆU TẮT BOT AN TOÀN (mỗi 1 giây)
+            if r.get(SHUTDOWN_KEY):
+                dang_shutdown = True
+                print(f"\n🛑 [SHUTDOWN] {bot_name} Nhận tín hiệu tắt! Đợi lệnh đang xử lý xong...")
+                # ĐỢI TẤT CẢ THREAD ĐANG CHẠY HOÀN TẤT (CHỐNG LỆCH CHÂN)
+                executor.shutdown(wait=True)
+                print(f"✅ {bot_name} Tất cả lệnh đã xử lý xong. Tắt MT5...")
+                mt5.shutdown()
+                print(f"👋 {bot_name} Đã thoát an toàn!")
+                break
             
             if terminal_info is None:
                 print(f"⚠️ {bot_name} Mất kết nối nội bộ! Đang thử khởi tạo lại...")
@@ -375,7 +444,7 @@ try:
             if thu_tu_master:
                 chi_thi = json.loads(thu_tu_master)
                 # print(f"\n📨 {bot_name} Nhận lệnh từ Master: {chi_thi}")
-                executor.submit(thuc_thi_chi_thi, chi_thi, tick)
+                safe_submit(thuc_thi_chi_thi, chi_thi, tick)
                 
         else:
             mt5.symbol_select(args.symbol, True)
@@ -413,6 +482,7 @@ try:
         sleep(0.001)
 
 except KeyboardInterrupt:
-    print(f"\n🛑 {bot_name} Đã dừng an toàn.")
-    executor.shutdown(wait=False) # Dọn dẹp Pool
+    print(f"\n🛑 {bot_name} Nhận tín hiệu tắt (Ctrl+C). Đợi lệnh đang xử lý...")
+    executor.shutdown(wait=True) # ĐỢI THREAD XONG để tránh lệch chân
     mt5.shutdown()
+    print(f"👋 {bot_name} Đã thoát an toàn!")
