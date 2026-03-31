@@ -1,3 +1,14 @@
+def lay_spread_pivot(config_cap):
+    spread_pivot = config_cap.get('spread_pivot')
+    if spread_pivot is None:
+        spread_pivot = config_cap.get('mean', config_cap.get('pivot', 0.0))
+
+    try:
+        return float(spread_pivot)
+    except (TypeError, ValueError):
+        return 0.0
+
+
 def check_tin_hieu_arbitrage(tick_base, tick_diff, config_cap, huong_dang_danh=None):
     """
     Phân tích giá và trả về tín hiệu VÀO LỆNH hoặc ĐÓNG LỆNH.
@@ -10,10 +21,14 @@ def check_tin_hieu_arbitrage(tick_base, tick_diff, config_cap, huong_dang_danh=N
     
     dev_entry = config_cap['deviation_entry']
     dev_close = config_cap['deviation_close']
+    spread_pivot = lay_spread_pivot(config_cap)
     
     # 🚀 Cache kết quả tính toán chênh lệch (tránh tính lại nhiều lần)
-    chenh_th1 = base_bid - diff_ask  # TH1: Base cao hơn Diff
-    chenh_th2 = diff_bid - base_ask  # TH2: Diff cao hơn Base
+    chenh_th1_raw = base_bid - diff_ask
+    chenh_th2_raw = diff_bid - base_ask
+
+    chenh_th1 = chenh_th1_raw - spread_pivot  # TH1: Base cao hơn Diff
+    chenh_th2 = chenh_th2_raw + spread_pivot  # TH2: Diff cao hơn Base
 
     # ==========================================
     # 1. KIỂM TRA TÍN HIỆU ĐÓNG LỆNH (Chỉ check nếu đang giữ lệnh hướng đó)
@@ -25,6 +40,8 @@ def check_tin_hieu_arbitrage(tick_base, tick_diff, config_cap, huong_dang_danh=N
             return {
                 "hanh_dong": "DONG_LENH",
                 "chenh_lech": chenh_th1,
+                "chenh_lech_raw": chenh_th1_raw,
+                "spread_pivot": spread_pivot,
                 "loai_dong": "TH2" 
             }
             
@@ -34,6 +51,8 @@ def check_tin_hieu_arbitrage(tick_base, tick_diff, config_cap, huong_dang_danh=N
             return {
                 "hanh_dong": "DONG_LENH",
                 "chenh_lech": chenh_th2,
+                "chenh_lech_raw": chenh_th2_raw,
+                "spread_pivot": spread_pivot,
                 "loai_dong": "TH1"
             }
 
@@ -48,7 +67,9 @@ def check_tin_hieu_arbitrage(tick_base, tick_diff, config_cap, huong_dang_danh=N
             "loai_lenh": "TH1",
             "lenh_base": "SELL",
             "lenh_diff": "BUY",
-            "chenh_lech": chenh_th1
+            "chenh_lech": chenh_th1,
+            "chenh_lech_raw": chenh_th1_raw,
+            "spread_pivot": spread_pivot
         }
         
     # Vào lệnh TH2: Diff cao hơn Base (Buy Base, Sell Diff)
@@ -58,7 +79,9 @@ def check_tin_hieu_arbitrage(tick_base, tick_diff, config_cap, huong_dang_danh=N
             "loai_lenh": "TH2",
             "lenh_base": "BUY",
             "lenh_diff": "SELL",
-            "chenh_lech": chenh_th2
+            "chenh_lech": chenh_th2,
+            "chenh_lech_raw": chenh_th2_raw,
+            "spread_pivot": spread_pivot
         }
         
     return {"hanh_dong": "CHO_DOI"}

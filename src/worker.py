@@ -304,7 +304,11 @@ def thuc_thi_chi_thi(chi_thi, current_tick):
                     "role": chi_thi.get("role", "UNKNOWN"),
                     "ticket": result.order,
                     "chenh_vao": context.get("chenh_vao", 0),
+                    "chenh_vao_raw": context.get("chenh_vao_raw", context.get("chenh_vao", 0)),
                     "tinh_chat_vao": context.get("tinh_chat_vao", "UNKNOWN"),
+                    "entry_spread_pivot": context.get("entry_spread_pivot", 0.0),
+                    "conf_dev_entry": context.get("conf_dev_entry", 0),
+                    "entry_stable_time": context.get("entry_stable_time", context.get("conf_stable_time", 0)),
                     # Kẹp thêm các thông số cấu hình và Hz cho Kế toán
                     "tick_hz_base_in": context.get("tick_hz_base_in", 0),
                     "tick_hz_diff_in": context.get("tick_hz_diff_in", 0)

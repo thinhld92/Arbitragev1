@@ -13,7 +13,7 @@ ctypes.windll.kernel32.SetConsoleTitleW("KẾ TOÁN TRƯỞNG")
 # Tọa độ X=1020, Y=0 (Đặt cạnh lề phải của các cửa sổ Worker/Master)
 hwnd = ctypes.windll.kernel32.GetConsoleWindow()
 if hwnd:
-    ctypes.windll.user32.MoveWindow(hwnd, 600, 0, 320, 750, True)
+    ctypes.windll.user32.MoveWindow(hwnd, 600, 0, 350, 800, True)
 
 with open('config.json', 'r', encoding='utf-8') as f:
     config = json.load(f)
@@ -38,9 +38,88 @@ last_cleanup_time = time.time()
 daily_stats = {}
 current_day_str = None
 
+
+def as_float(value, default=0.0):
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def lay_spread_pivot(config_cap):
+    spread_pivot = config_cap.get('spread_pivot')
+    if spread_pivot is None:
+        spread_pivot = config_cap.get('mean', config_cap.get('pivot', 0.0))
+    return as_float(spread_pivot, 0.0)
+
+
+def lay_pair_config(pair_id):
+    return next((p for p in config.get('danh_sach_cap', []) if p['id'] == pair_id), {})
+
+
+def lay_snapshot_cau_hinh(ctx):
+    pair_config = lay_pair_config(ctx['pair_id'])
+    pair_spread_pivot = lay_spread_pivot(pair_config)
+
+    return {
+        "conf_dev_entry": as_float(ctx.get("conf_dev_entry", pair_config.get('deviation_entry', 0)), 0.0),
+        "conf_dev_close": as_float(ctx.get("conf_dev_close", pair_config.get('deviation_close', 0)), 0.0),
+        "conf_stable_time": as_float(ctx.get("conf_stable_time", pair_config.get('stable_time', 0)), 0.0),
+        "entry_stable_time": as_float(ctx.get("entry_stable_time", pair_config.get('stable_time', 0)), 0.0),
+        "entry_spread_pivot": as_float(ctx.get("entry_spread_pivot", pair_spread_pivot), 0.0),
+        "close_spread_pivot": as_float(
+            ctx.get("close_spread_pivot", ctx.get("entry_spread_pivot", pair_spread_pivot)),
+            0.0
+        ),
+    }
+
 # Bố cục Header giống Excel
 HEADER_TABLE = f"{'TIME':<8} │ {'PROFIT':>8} │ {'TOTAL':>8} │ {'VOL':>5}"
 SEPARATOR_LINE = "─" * 38
+
+CSV_HEADER = [
+    'Time_Closed', 'Pair_ID', 'Action', 'Volume',
+    'Base_Ticket', 'Diff_Ticket', 'Entry_Mode', 'Entry_Dev',
+    'Close_Mode', 'Close_Dev', 'Base_Open', 'Base_Close',
+    'Diff_Open', 'Diff_Close',
+    'Base_Profit', 'Diff_Profit', 'Base_Fee', 'Diff_Fee',
+    'Total_Fee', 'Net_Profit', 'Total_Day_Volume', 'Total_Day_Profit',
+    'Base_Tick_Hz_In', 'Diff_Tick_Hz_In', 'Base_Tick_Hz_Out', 'Diff_Tick_Hz_Out',
+    'Conf_Dev_Entry', 'Conf_Dev_Close', 'Conf_Stable_Time',
+    'Entry_Spread_Raw', 'Close_Spread_Raw', 'Entry_Spread_Pivot', 'Close_Spread_Pivot',
+    'Entry_Stable_Time'
+]
+migrated_csv_files = set()
+
+
+def dam_bao_schema_csv(csv_file):
+    if csv_file in migrated_csv_files or not os.path.isfile(csv_file):
+        return
+
+    with open(csv_file, 'r', encoding='utf-8', newline='') as f_read:
+        rows = list(csv.reader(f_read))
+
+    if not rows:
+        migrated_csv_files.add(csv_file)
+        return
+
+    header = rows[0]
+    if header == CSV_HEADER:
+        migrated_csv_files.add(csv_file)
+        return
+
+    if len(header) <= len(CSV_HEADER) and header == CSV_HEADER[:len(header)]:
+        pad_size = len(CSV_HEADER) - len(header)
+        rows[0] = CSV_HEADER
+        for i in range(1, len(rows)):
+            rows[i].extend([""] * pad_size)
+
+        with open(csv_file, 'w', newline='', encoding='utf-8') as f_write:
+            writer = csv.writer(f_write)
+            writer.writerows(rows)
+
+    migrated_csv_files.add(csv_file)
+
 
 print("Kế Toán Trưởng Sẵn sàng ghi sổ...")
 print(HEADER_TABLE)
@@ -111,7 +190,7 @@ while True:
             role = bien_lai.get("role")
             
             if not pair_token or not role:
-                print(f"⚠️ [DEBUG] Biên lai THIẾU DỮ LIỆU! pair_token={pair_token}, role={role}")
+                print(f"⚠️ Biên lai thiếu dữ liệu: pair_token={pair_token}, role={role}")
                 continue
             
             # Lưu tạm vào khay (kèm timestamp)
@@ -119,10 +198,6 @@ while True:
             if pair_token not in pending_receipts:
                 pending_receipts[pair_token] = {}
             pending_receipts[pair_token][role] = bien_lai
-            
-            # 🔍 [DEBUG] Log mỗi khi nhận biên lai
-            print(f"📩 [DEBUG] Nhận biên lai: {role} | Token: {pair_token[:30]} | Ticket: {bien_lai.get('ticket')}")
-            print(f"   Pending keys: {list(pending_receipts.keys())}")
             
             # KHI NHẬN ĐƯỢC BIÊN LAI, KIỂM TRA XEM CÓ PHẢI LÀ ÁN TRẢM ĐƠN KHÔNG
             is_single = ctx.get("is_single_cut", False)
@@ -196,32 +271,31 @@ while True:
                     current_total_vol = daily_stats[pair_id]['total_volume']
                     current_total_profit = daily_stats[pair_id]['total_net_profit']
 
+                    dam_bao_schema_csv(csv_file)
+                    config_snapshot = lay_snapshot_cau_hinh(ctx)
+                    c_dev_entry = config_snapshot["conf_dev_entry"]
+                    c_dev_close = config_snapshot["conf_dev_close"]
+                    c_stable_time = config_snapshot["conf_stable_time"]
+                    c_entry_stable_time = config_snapshot["entry_stable_time"]
+                    c_entry_spread_pivot = config_snapshot["entry_spread_pivot"]
+                    c_close_spread_pivot = config_snapshot["close_spread_pivot"]
+                    c_entry_dev = as_float(ctx.get("chenh_vao", 0), 0.0)
+                    c_close_dev = as_float(ctx.get("chenh_dong", 0), 0.0)
+                    c_entry_spread_raw = as_float(ctx.get("chenh_vao_raw", ctx.get("chenh_vao", 0)), 0.0)
+                    c_close_spread_raw = as_float(ctx.get("chenh_dong_raw", ctx.get("chenh_dong", 0)), 0.0)
+
                     with open(csv_file, mode='a', newline='', encoding='utf-8') as f:
                         writer = csv.writer(f)
-                        if not file_exists:
-                            writer.writerow([
-                                'Time_Closed', 'Pair_ID', 'Action', 'Volume', 
-                                'Base_Ticket', 'Diff_Ticket', 'Entry_Mode', 'Entry_Dev', 
-                                'Close_Mode', 'Close_Dev', 'Base_Open', 'Base_Close', 
-                                'Diff_Open', 'Diff_Close', 
-                                'Base_Profit', 'Diff_Profit', 'Base_Fee', 'Diff_Fee', 
-                                'Total_Fee', 'Net_Profit', 'Total_Day_Volume', 'Total_Day_Profit',
-                                'Base_Tick_Hz_In', 'Diff_Tick_Hz_In', 'Base_Tick_Hz_Out', 'Diff_Tick_Hz_Out', 
-                                'Conf_Dev_Entry', 'Conf_Dev_Close', 'Conf_Stable_Time'
-                            ])
-                        
-                        pair_config = next((p for p in config.get('danh_sach_cap', []) if p['id'] == ctx['pair_id']), {})
-                        c_dev_entry = pair_config.get('deviation_entry', 0)
-                        c_dev_close = pair_config.get('deviation_close', 0)
-                        c_stable_time = pair_config.get('stable_time', 0)
+                        if not file_exists or os.path.getsize(csv_file) == 0:
+                            writer.writerow(CSV_HEADER)
                         
                         # IN RA EXCEL
                         writer.writerow([
                             datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S'),
                             ctx['pair_id'], ctx['action_type'], vol,
                             b_ticket, d_ticket,
-                            ctx['mode_vao'], f"{ctx['chenh_vao']:.2f}",
-                            ctx['mode_dong'], f"{ctx['chenh_dong']:.2f}",
+                            ctx['mode_vao'], f"{c_entry_dev:.2f}",
+                            ctx['mode_dong'], f"{c_close_dev:.2f}",
                             b_op, b_cp, d_op, d_cp,
                             f"{b_prof:.2f}", f"{d_prof:.2f}", 
                             f"{b_fee:.2f}", f"{d_fee:.2f}",       
@@ -229,7 +303,10 @@ while True:
                             f"{current_total_vol:.2f}", f"{current_total_profit:.2f}",
                             ctx.get('tick_hz_base_in', 0), ctx.get('tick_hz_diff_in', 0),
                             ctx.get('tick_hz_base_out', 0), ctx.get('tick_hz_diff_out', 0),
-                            c_dev_entry, c_dev_close, c_stable_time
+                            c_dev_entry, c_dev_close, c_stable_time,
+                            f"{c_entry_spread_raw:.2f}", f"{c_close_spread_raw:.2f}",
+                            f"{c_entry_spread_pivot:.2f}", f"{c_close_spread_pivot:.2f}",
+                            f"{c_entry_stable_time:.0f}"
                         ])
                     
                     time_str = datetime.now(timezone.utc).strftime('%H:%M:%S')

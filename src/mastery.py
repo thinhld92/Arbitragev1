@@ -41,6 +41,26 @@ logging.info(f"=== KHỞI ĐỘNG MASTER BRAIN {args.pair_id} ===")
 with open(CONFIG_FILE, 'r', encoding='utf-8') as f:
     config = json.load(f)
 
+
+def lay_spread_pivot(config_cap):
+    spread_pivot = config_cap.get('spread_pivot')
+    if spread_pivot is None:
+        spread_pivot = config_cap.get('mean', config_cap.get('pivot', 0.0))
+
+    try:
+        return float(spread_pivot)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def tao_snapshot_cau_hinh(config_cap):
+    return {
+        "spread_pivot": lay_spread_pivot(config_cap),
+        "deviation_entry": config_cap.get('deviation_entry', 0),
+        "deviation_close": config_cap.get('deviation_close', 0),
+        "stable_time": config_cap.get('stable_time', 0),
+    }
+
 # 🌟 LẤY TÊN VPS VÀ TẠO BIỂN TÊN CHO MASTER
 vps_name = config.get('vps_name', 'LOCAL')
 master_name = f"[{vps_name} | {args.pair_id}]"
@@ -74,6 +94,7 @@ key_state = f"STATE:MASTER:{args.pair_id}"
 
 dev_entry = cap_hien_tai['deviation_entry']
 dev_close = cap_hien_tai['deviation_close']
+spread_pivot = lay_spread_pivot(cap_hien_tai)
 stable_time_sec = cap_hien_tai['stable_time'] / 1000.0  
 cooldown_close_sec = cap_hien_tai.get('cooldown_close_second', 2)
 cooldown_sec = cap_hien_tai['cooldown_second']
@@ -97,6 +118,15 @@ max_tick_hz_diff = cap_hien_tai.get('max_tick_hz_diff', 0)
 # ==========================================
 # 2. KHÔI PHỤC TRÍ NHỚ (SỔ CÁI) TỪ REDIS
 # ==========================================
+default_last_entry_info = {
+    "chenh_lech": 0,
+    "chenh_lech_raw": 0,
+    "entry_spread_pivot": 0.0,
+    "tinh_chat": "UNKNOWN",
+    "conf_dev_entry": 0,
+    "entry_stable_time": 0,
+}
+
 saved_state_raw = r.get(key_state)
 if saved_state_raw:
     saved_state = json.loads(saved_state_raw)
@@ -110,14 +140,20 @@ if saved_state_raw:
         
     thoi_diem_vao_lenh_cuoi = saved_state.get("thoi_diem_vao_lenh_cuoi", 0)
     # 👉 THÊM: Khôi phục "Ký ức lúc VÀO" của lệnh gần nhất
-    last_entry_info = saved_state.get("last_entry_info", {"chenh_lech": 0, "tinh_chat": "UNKNOWN"}) 
+    last_entry_info = saved_state.get("last_entry_info", default_last_entry_info.copy())
+    last_entry_info.setdefault("chenh_lech", 0)
+    last_entry_info.setdefault("chenh_lech_raw", last_entry_info.get("chenh_lech", 0))
+    last_entry_info.setdefault("entry_spread_pivot", 0.0)
+    last_entry_info.setdefault("tinh_chat", "UNKNOWN")
+    last_entry_info.setdefault("conf_dev_entry", 0)
+    last_entry_info.setdefault("entry_stable_time", 0)
     print(f"🧠 Đã khôi phục Sổ Cái: Gồng {len(lich_su_vao_lenh)} cặp lệnh đã ghép đôi.")
 else:
     huong_dang_danh = None
     lich_su_vao_lenh = []
     thoi_diem_vao_lenh_cuoi = 0
     # 👉 THÊM: Tạo mới Ký ức
-    last_entry_info = {"chenh_lech": 0, "tinh_chat": "UNKNOWN"}
+    last_entry_info = default_last_entry_info.copy()
     print("🧠 Bắt đầu với Sổ Cái trống rỗng.")
 
 def luu_tri_nho():
@@ -234,6 +270,7 @@ try:
                     if cap_hien_tai:
                         dev_entry = cap_hien_tai['deviation_entry']
                         dev_close = cap_hien_tai['deviation_close']
+                        spread_pivot = lay_spread_pivot(cap_hien_tai)
                         max_orders = cap_hien_tai['max_orders']
                         cooldown_sec = cap_hien_tai['cooldown_second']
                         cooldown_close_sec = cap_hien_tai.get('cooldown_close_second', 2)
@@ -257,7 +294,7 @@ try:
                     vol_d = cap_hien_tai.get('volume_diff', 0.01)
                     msg_reload = (
                         f"🔄 [HOT RELOAD] ĐÃ CẬP NHẬT THÔNG SỐ MỚI:\n"
-                        f"   ├─ Chiến thuật : {stable_mode} {dev_entry}|{dev_close} | {stable_time_sec*1000:.0f}ms | Hold {hold_time_sec}s\n"
+                        f"   ├─ Chiến thuật : {stable_mode} {dev_entry}|{dev_close} | Pivot {spread_pivot:+.2f} | {stable_time_sec*1000:.0f}ms | Hold {hold_time_sec}s\n"
                         f"   ├─ Bộ lọc (In/Out): {filter_entry.upper()} / {filter_close.upper()}\n"
                         f"   ├─ Quản lý vốn : Cảnh báo EQ < {alert_equity}$ | Vol {vol_b}|{vol_d}\n"
                         f"   ├─ Cầu dao    : Khóa {orphan_cooldown_second}s nếu mồ côi {max_orphan_count} lần\n"
@@ -266,7 +303,7 @@ try:
                     print(msg_reload)
 
                     # 2. Chuỗi dành cho File Log (Nén lại thành 1 dòng duy nhất, không xuống dòng)
-                    msg_reload_log = f"[HOT RELOAD] Lệch {dev_entry}|{dev_close}, Lọc In:{filter_entry}/Out:{filter_close}, Băng {stable_time_sec*1000:.0f}ms, Hold {hold_time_sec}s, EQ<{alert_equity}$, Cầu dao {max_orphan_count}x/{orphan_cooldown_second}s"
+                    msg_reload_log = f"[HOT RELOAD] Lệch {dev_entry}|{dev_close}, Pivot {spread_pivot:+.2f}, Lọc In:{filter_entry}/Out:{filter_close}, Băng {stable_time_sec*1000:.0f}ms, Hold {hold_time_sec}s, EQ<{alert_equity}$, Cầu dao {max_orphan_count}x/{orphan_cooldown_second}s"
                     logging.info(msg_reload_log)
                 except Exception as e:
                     pass
@@ -342,7 +379,11 @@ try:
                                 "base_ticket": None, "diff_ticket": None, 
                                 "time": time.time(), 
                                 "chenh_vao": result_data.get("chenh_vao", 0),
+                                "chenh_vao_raw": result_data.get("chenh_vao_raw", result_data.get("chenh_vao", 0)),
                                 "tinh_chat_vao": result_data.get("tinh_chat_vao", "UNKNOWN"),
+                                "entry_spread_pivot": result_data.get("entry_spread_pivot", 0.0),
+                                "conf_dev_entry": result_data.get("conf_dev_entry", 0),
+                                "entry_stable_time": result_data.get("entry_stable_time", 0),
                                 # Kế toán
                                 "tick_hz_base_in": result_data.get("tick_hz_base_in", 0),
                                 "tick_hz_diff_in": result_data.get("tick_hz_diff_in", 0)
@@ -363,7 +404,11 @@ try:
                                 "diff_ticket": d_ticket,
                                 "time_match": time.time(),
                                 "chenh_lech_vao": pending_jobs[job_id]["chenh_vao"],
+                                "chenh_lech_vao_raw": pending_jobs[job_id].get("chenh_vao_raw", pending_jobs[job_id]["chenh_vao"]),
                                 "tinh_chat_vao": pending_jobs[job_id]["tinh_chat_vao"],
+                                "entry_spread_pivot": pending_jobs[job_id].get("entry_spread_pivot", 0.0),
+                                "conf_dev_entry": pending_jobs[job_id].get("conf_dev_entry", 0),
+                                "entry_stable_time": pending_jobs[job_id].get("entry_stable_time", 0),
                                 # Kế toán
                                 "tick_hz_base_in": pending_jobs[job_id].get("tick_hz_base_in", 0),
                                 "tick_hz_diff_in": pending_jobs[job_id].get("tick_hz_diff_in", 0)
@@ -413,7 +458,11 @@ try:
                         "time_match": time.time(),
                         # 👉 THÊM: Lột tờ giấy nhớ dán vào Sổ cái
                         "chenh_lech_vao": last_entry_info.get("chenh_lech", 0),
-                        "tinh_chat_vao": last_entry_info.get("tinh_chat", "UNKNOWN")
+                        "chenh_lech_vao_raw": last_entry_info.get("chenh_lech_raw", last_entry_info.get("chenh_lech", 0)),
+                        "tinh_chat_vao": last_entry_info.get("tinh_chat", "UNKNOWN"),
+                        "entry_spread_pivot": last_entry_info.get("entry_spread_pivot", 0.0),
+                        "conf_dev_entry": last_entry_info.get("conf_dev_entry", 0),
+                        "entry_stable_time": last_entry_info.get("entry_stable_time", 0)
                     })
                 luu_tri_nho()
                 # Khớp được lệnh ngon lành thì reset bộ đếm mồ côi về 0
@@ -447,10 +496,18 @@ try:
                             "pair_token": cap['id_cap'], # Giữ nguyên ID cặp gốc để Kế toán ghép
                             "pair_id": args.pair_id,
                             "chenh_vao": cap.get('chenh_lech_vao', 0),
+                            "chenh_vao_raw": cap.get('chenh_lech_vao_raw', cap.get('chenh_lech_vao', 0)),
                             "mode_vao": cap.get('tinh_chat_vao', 'UNKNOWN'),
                             "chenh_dong": 0, 
+                            "chenh_dong_raw": 0,
+                            "entry_spread_pivot": cap.get('entry_spread_pivot', 0.0),
+                            "close_spread_pivot": spread_pivot,
                             "mode_dong": "[STOPOUT]", # Ghi sổ là chết do Stopout/Mất 1 chân
                             "action_type": "FORCE_CLOSE",
+                            "conf_dev_entry": cap.get('conf_dev_entry', dev_entry),
+                            "conf_dev_close": dev_close,
+                            "conf_stable_time": cap_hien_tai.get('stable_time', 0),
+                            "entry_stable_time": cap.get('entry_stable_time', cap_hien_tai.get('stable_time', 0)),
                             "tick_hz_base_in": cap.get("tick_hz_base_in", 0),
                             "tick_hz_diff_in": cap.get("tick_hz_diff_in", 0),
                             "tick_hz_base_out": tick_base.get("tick_hz", 0),
@@ -485,10 +542,18 @@ try:
                             "pair_token": cap['id_cap'], # Giữ nguyên ID cặp gốc để Kế toán ghép
                             "pair_id": args.pair_id,
                             "chenh_vao": cap.get('chenh_lech_vao', 0),
+                            "chenh_vao_raw": cap.get('chenh_lech_vao_raw', cap.get('chenh_lech_vao', 0)),
                             "mode_vao": cap.get('tinh_chat_vao', 'UNKNOWN'),
                             "chenh_dong": 0, 
+                            "chenh_dong_raw": 0,
+                            "entry_spread_pivot": cap.get('entry_spread_pivot', 0.0),
+                            "close_spread_pivot": spread_pivot,
                             "mode_dong": "[STOPOUT]", # Ghi sổ là chết do Stopout
                             "action_type": "FORCE_CLOSE",
+                            "conf_dev_entry": cap.get('conf_dev_entry', dev_entry),
+                            "conf_dev_close": dev_close,
+                            "conf_stable_time": cap_hien_tai.get('stable_time', 0),
+                            "entry_stable_time": cap.get('entry_stable_time', cap_hien_tai.get('stable_time', 0)),
                             "tick_hz_base_in": cap.get("tick_hz_base_in", 0),
                             "tick_hz_diff_in": cap.get("tick_hz_diff_in", 0),
                             "tick_hz_base_out": tick_base.get("tick_hz", 0),
@@ -537,11 +602,19 @@ try:
                             "pair_token": f"ORPHAN_{ub['ticket']}",
                             "pair_id": args.pair_id,
                             "chenh_vao": 0,
+                            "chenh_vao_raw": 0,
                             "mode_vao": "[UNKNOWN]",
                             "chenh_dong": 0,
+                            "chenh_dong_raw": 0,
+                            "entry_spread_pivot": 0.0,
+                            "close_spread_pivot": spread_pivot,
                             "mode_dong": "[ORPHAN_CUT]",
                             "action_type": "SINGLE_CLOSE",
                             "is_single_cut": True,
+                            "conf_dev_entry": 0,
+                            "conf_dev_close": dev_close,
+                            "conf_stable_time": cap_hien_tai.get('stable_time', 0),
+                            "entry_stable_time": 0,
                             "tick_hz_base_in": 0,
                             "tick_hz_diff_in": 0,
                             "tick_hz_base_out": tick_base.get("tick_hz", 0),
@@ -563,11 +636,19 @@ try:
                             "pair_token": f"ORPHAN_{ud['ticket']}",
                             "pair_id": args.pair_id,
                             "chenh_vao": 0,
+                            "chenh_vao_raw": 0,
                             "mode_vao": "[UNKNOWN]",
                             "chenh_dong": 0,
+                            "chenh_dong_raw": 0,
+                            "entry_spread_pivot": 0.0,
+                            "close_spread_pivot": spread_pivot,
                             "mode_dong": "[ORPHAN_CUT]",
                             "action_type": "SINGLE_CLOSE",
                             "is_single_cut": True,
+                            "conf_dev_entry": 0,
+                            "conf_dev_close": dev_close,
+                            "conf_stable_time": cap_hien_tai.get('stable_time', 0),
+                            "entry_stable_time": 0,
                             "tick_hz_base_in": 0,
                             "tick_hz_diff_in": 0,
                             "tick_hz_base_out": tick_base.get("tick_hz", 0),
@@ -661,10 +742,18 @@ try:
                             "pair_token": cap['id_cap'], # Giữ nguyên ID cặp gốc để Kế toán ghép đôi
                             "pair_id": args.pair_id,
                             "chenh_vao": cap.get('chenh_lech_vao', 0),
+                            "chenh_vao_raw": cap.get('chenh_lech_vao_raw', cap.get('chenh_lech_vao', 0)),
                             "mode_vao": cap.get('tinh_chat_vao', 'UNKNOWN'),
                             "chenh_dong": 0, # Giờ cấm thì chém bất chấp lệch giá
+                            "chenh_dong_raw": 0,
+                            "entry_spread_pivot": cap.get('entry_spread_pivot', 0.0),
+                            "close_spread_pivot": spread_pivot,
                             "mode_dong": "[BLACKOUT_CUT]", # Đánh dấu sẹo trên Excel là do Giờ cấm
                             "action_type": "BLACKOUT_CLOSE",
+                            "conf_dev_entry": cap.get('conf_dev_entry', dev_entry),
+                            "conf_dev_close": dev_close,
+                            "conf_stable_time": cap_hien_tai.get('stable_time', 0),
+                            "entry_stable_time": cap.get('entry_stable_time', cap_hien_tai.get('stable_time', 0)),
                             "tick_hz_base_in": cap.get("tick_hz_base_in", 0),
                             "tick_hz_diff_in": cap.get("tick_hz_diff_in", 0),
                             "tick_hz_base_out": tick_base.get("tick_hz", 0),
@@ -784,13 +873,19 @@ try:
                                 loai_dong = tin_hieu.get("loai_dong", "UNKNOWN") 
                                 cap_bi_dong = cap_du_tuoi[0]
                                 chenh_lech_close = tin_hieu.get("chenh_lech", 0)
+                                chenh_lech_close_raw = tin_hieu.get("chenh_lech_raw", chenh_lech_close)
+                                close_spread_pivot = tin_hieu.get("spread_pivot", spread_pivot)
                                 
                                 # 👉 PHÂN TÍCH CHIẾN THUẬT LÚC ĐÓNG
                                 loai_tinh_chat_dong = "[F]" 
                                 if stable_mode == 'continuous' and (time.time() - thoi_diem_nhan_tick_cuoi) < stable_time_sec:
                                     loai_tinh_chat_dong = "[C]"
 
-                                msg_chot = f"💰 GIÁ BĂNG {stable_time_sec*1000:.0f}ms! TỈA LỜI CẶP {cap_bi_dong['id_cap']} {loai_tinh_chat_dong}. Lệch: {chenh_lech_close:.2f}."
+                                msg_chot = (
+                                    f"💰 GIÁ BĂNG {stable_time_sec*1000:.0f}ms! TỈA LỜI CẶP {cap_bi_dong['id_cap']} "
+                                    f"{loai_tinh_chat_dong}. Lệch: {chenh_lech_close:.2f} "
+                                    f"(raw {chenh_lech_close_raw:.2f}, pivot {close_spread_pivot:+.2f})."
+                                )
                                 print(msg_chot)
                                 logging.info(msg_chot)
                                 
@@ -801,10 +896,18 @@ try:
                                     "pair_token": cap_bi_dong['id_cap'],
                                     "pair_id": args.pair_id,
                                     "chenh_vao": cap_bi_dong.get('chenh_lech_vao', 0),
+                                    "chenh_vao_raw": cap_bi_dong.get('chenh_lech_vao_raw', cap_bi_dong.get('chenh_lech_vao', 0)),
                                     "mode_vao": cap_bi_dong.get('tinh_chat_vao', 'UNKNOWN'),
                                     "chenh_dong": chenh_lech_close,
+                                    "chenh_dong_raw": chenh_lech_close_raw,
+                                    "entry_spread_pivot": cap_bi_dong.get('entry_spread_pivot', 0.0),
+                                    "close_spread_pivot": close_spread_pivot,
                                     "mode_dong": loai_tinh_chat_dong,
                                     "action_type": loai_dong,
+                                    "conf_dev_entry": cap_bi_dong.get('conf_dev_entry', dev_entry),
+                                    "conf_dev_close": dev_close,
+                                    "conf_stable_time": cap_hien_tai.get('stable_time', 0),
+                                    "entry_stable_time": cap_bi_dong.get('entry_stable_time', cap_hien_tai.get('stable_time', 0)),
                                     # Kẹp thêm thông số Accountant
                                     "tick_hz_base_in": cap_bi_dong.get("tick_hz_base_in", 0),
                                     "tick_hz_diff_in": cap_bi_dong.get("tick_hz_diff_in", 0),
@@ -914,9 +1017,20 @@ try:
                             if stable_mode == 'continuous' and (time.time() - thoi_diem_nhan_tick_cuoi) < stable_time_sec:
                                 loai_tinh_chat = "[C]"
                                 
-                            last_entry_info = {"chenh_lech": tin_hieu['chenh_lech'], "tinh_chat": loai_tinh_chat}
+                            last_entry_info = {
+                                "chenh_lech": tin_hieu['chenh_lech'],
+                                "chenh_lech_raw": tin_hieu.get('chenh_lech_raw', tin_hieu['chenh_lech']),
+                                "entry_spread_pivot": tin_hieu.get('spread_pivot', spread_pivot),
+                                "tinh_chat": loai_tinh_chat,
+                                "conf_dev_entry": dev_entry,
+                                "entry_stable_time": cap_hien_tai.get('stable_time', 0)
+                            }
                             
-                            msg_vao = f"⚡ BÓP CÒ {loai_lenh_moi} {loai_tinh_chat}! Lệch {tin_hieu['chenh_lech']:.2f}!!!"
+                            msg_vao = (
+                                f"⚡ BÓP CÒ {loai_lenh_moi} {loai_tinh_chat}! Lệch {tin_hieu['chenh_lech']:.2f} "
+                                f"(raw {tin_hieu.get('chenh_lech_raw', tin_hieu['chenh_lech']):.2f}, "
+                                f"pivot {tin_hieu.get('spread_pivot', spread_pivot):+.2f})!!!"
+                            )
                             print(msg_vao)
                             logging.info(msg_vao)
 
@@ -932,7 +1046,14 @@ try:
                             # Gửi lệnh KÈM THEO JOB_ID để YÊU CẦU WORKER REPORT BACK
                             context_vao = {
                                 "job_id": job_id, "pair_id": args.pair_id,
-                                "chenh_vao": tin_hieu['chenh_lech'], "tinh_chat_vao": loai_tinh_chat,
+                                "chenh_vao": tin_hieu['chenh_lech'],
+                                "chenh_vao_raw": tin_hieu.get('chenh_lech_raw', tin_hieu['chenh_lech']),
+                                "entry_spread_pivot": tin_hieu.get('spread_pivot', spread_pivot),
+                                "tinh_chat_vao": loai_tinh_chat,
+                                "conf_dev_entry": dev_entry,
+                                "conf_dev_close": dev_close,
+                                "conf_stable_time": cap_hien_tai.get('stable_time', 0),
+                                "entry_stable_time": cap_hien_tai.get('stable_time', 0),
                                 # Kẹp thêm thông số Accountant
                                 "tick_hz_base_in": tick_base.get("tick_hz", 0),
                                 "tick_hz_diff_in": tick_diff.get("tick_hz", 0)
