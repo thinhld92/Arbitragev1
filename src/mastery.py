@@ -139,6 +139,7 @@ if saved_state_raw:
         huong_dang_danh = None
         
     thoi_diem_vao_lenh_cuoi = saved_state.get("thoi_diem_vao_lenh_cuoi", 0)
+    thoi_diem_vua_ra_lenh_dong = saved_state.get("thoi_diem_vua_ra_lenh_dong", 0)
     # 👉 THÊM: Khôi phục "Ký ức lúc VÀO" của lệnh gần nhất
     last_entry_info = saved_state.get("last_entry_info", default_last_entry_info.copy())
     last_entry_info.setdefault("chenh_lech", 0)
@@ -152,6 +153,7 @@ else:
     huong_dang_danh = None
     lich_su_vao_lenh = []
     thoi_diem_vao_lenh_cuoi = 0
+    thoi_diem_vua_ra_lenh_dong = 0
     # 👉 THÊM: Tạo mới Ký ức
     last_entry_info = default_last_entry_info.copy()
     print("🧠 Bắt đầu với Sổ Cái trống rỗng.")
@@ -161,8 +163,9 @@ def luu_tri_nho():
         "huong_dang_danh": huong_dang_danh,
         "lich_su_vao_lenh": lich_su_vao_lenh,
         "thoi_diem_vao_lenh_cuoi": thoi_diem_vao_lenh_cuoi,
+        "thoi_diem_vua_ra_lenh_dong": thoi_diem_vua_ra_lenh_dong,
         # 👉 THÊM: Lưu Ký ức này xuống đĩa cứng (Redis) để khởi động lại không bị mất
-        "last_entry_info": last_entry_info 
+        "last_entry_info": last_entry_info
     }
     r.set(key_state, json.dumps(state))
 
@@ -193,7 +196,6 @@ last_base_msc = 0
 last_diff_msc = 0
 thoi_diem_nhan_tick_cuoi = 0
 da_xu_ly_vao_lenh_cho_tick_nay = False
-thoi_diem_vua_ra_lenh_dong = 0  
 
 last_tick_base_raw = ""
 last_tick_diff_raw = ""
@@ -211,6 +213,10 @@ local_nhan_diff = time.time()
 thoi_diem_spam_tram_cuoi = 0
 
 print(f"🚀 MASTER {args.pair_id} SẴN SÀNG CHIẾN ĐẤU (SELF-HEALING + BLACKOUT GUILLOTINE)!")
+
+# --- Startup Grace Period ---
+startup_time = time.time()
+STARTUP_GRACE_SECOND = cap_hien_tai.get('startup_grace_second', 15)
 
 # --- Cache Đồng Hồ ---
 last_time_update = 0
@@ -347,10 +353,11 @@ try:
             thoi_gian_tu_lan_vao_cuoi = now_sec - thoi_diem_vao_lenh_cuoi
             thoi_gian_tu_lan_dong_cuoi = now_sec - thoi_diem_vua_ra_lenh_dong
             trong_thoi_gian_bao_ve = (thoi_gian_tu_lan_vao_cuoi < 5.0) or (thoi_gian_tu_lan_dong_cuoi < 5.0)
+            trong_thoi_gian_khoi_dong = (now_sec - startup_time) < STARTUP_GRACE_SECOND
 
             # XÓA TRÍ NHỚ AN TOÀN KHI THỊ TRƯỜNG SẠCH BÓNG LỆNH
             if so_lenh_base == 0 and so_lenh_diff == 0:
-                if not trong_thoi_gian_bao_ve and (huong_dang_danh is not None or len(lich_su_vao_lenh) > 0):
+                if not trong_thoi_gian_bao_ve and not trong_thoi_gian_khoi_dong and (huong_dang_danh is not None or len(lich_su_vao_lenh) > 0):
                     huong_dang_danh = None
                     lich_su_vao_lenh.clear()
                     da_xu_ly_vao_lenh_cho_tick_nay = False 
@@ -582,7 +589,7 @@ try:
                     luu_tri_nho()
 
                 # --- TỘI 2: LỆNH LẠ MẶT (Lỗi vào xịt 1 bên, dư lệnh mồ côi, rớt cắt) ---
-                if len(unpaired_base) > 0 or len(unpaired_diff) > 0:
+                if (len(unpaired_base) > 0 or len(unpaired_diff) > 0) and not trong_thoi_gian_khoi_dong:
                     # Tăng biến đếm mồ côi
                     dem_so_lan_mo_coi_lien_tiep += 1
                     
