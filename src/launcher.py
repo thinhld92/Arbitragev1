@@ -66,9 +66,14 @@ for (broker, symbol), role in dict_workers.items():
 print("\n🧠 ĐANG ĐÁNH THỨC TƯỚNG QUÂN (MASTER)...")
 for cap in danh_sach_cap:
     pair_id = cap['id']
+    trade_mode = str(cap.get('trade_mode', 'hedge')).strip().lower()
+    if trade_mode not in ('hedge', 'single'):
+        print(f"❌ trade_mode không hợp lệ cho {pair_id}: {trade_mode}")
+        quit()
+    master_script = 'src/master_single.py' if trade_mode == 'single' else 'src/mastery.py'
     print(f"   👉 Đang gọi Master cho cặp: {pair_id}")
     subprocess.Popen(
-        ['cmd', '/k', 'python', 'src/mastery.py', '--pair_id', pair_id], 
+        ['cmd', '/k', 'python', master_script, '--pair_id', pair_id], 
         creationflags=subprocess.CREATE_NEW_CONSOLE
     )
     time.sleep(2)

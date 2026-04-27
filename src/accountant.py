@@ -87,7 +87,9 @@ CSV_HEADER = [
     'Base_Tick_Hz_In', 'Diff_Tick_Hz_In', 'Base_Tick_Hz_Out', 'Diff_Tick_Hz_Out',
     'Conf_Dev_Entry', 'Conf_Dev_Close', 'Conf_Stable_Time',
     'Entry_Spread_Raw', 'Close_Spread_Raw', 'Entry_Spread_Pivot', 'Close_Spread_Pivot',
-    'Entry_Stable_Time'
+    'Entry_Stable_Time',
+    'Trade_Mode', 'Execution_Exchange', 'Execution_Symbol',
+    'Execution_Role', 'Execution_Ticket', 'Execution_Side'
 ]
 migrated_csv_files = set()
 
@@ -200,7 +202,7 @@ while True:
             pending_receipts[pair_token][role] = bien_lai
             
             # KHI NHẬN ĐƯỢC BIÊN LAI, KIỂM TRA XEM CÓ PHẢI LÀ ÁN TRẢM ĐƠN KHÔNG
-            is_single = ctx.get("is_single_cut", False)
+            is_single = ctx.get("is_single_cut", False) or ctx.get("trade_mode") == "single"
 
             if is_single or ("BASE" in pending_receipts[pair_token] and "DIFF" in pending_receipts[pair_token]):
                 vps_name = config.get("vps_name", "trade_data")
@@ -306,7 +308,16 @@ while True:
                             c_dev_entry, c_dev_close, c_stable_time,
                             f"{c_entry_spread_raw:.2f}", f"{c_close_spread_raw:.2f}",
                             f"{c_entry_spread_pivot:.2f}", f"{c_close_spread_pivot:.2f}",
-                            f"{c_entry_stable_time:.0f}"
+                            f"{c_entry_stable_time:.0f}",
+                            ctx.get("trade_mode", "hedge"),
+                            ctx.get("execution_exchange", ""),
+                            ctx.get("execution_symbol", ""),
+                            ctx.get("execution_role", role if ctx.get("trade_mode") == "single" else ""),
+                            ctx.get(
+                                "execution_ticket",
+                                (b_ticket if role == "BASE" else d_ticket) if ctx.get("trade_mode") == "single" else ""
+                            ),
+                            ctx.get("execution_side", "")
                         ])
                     
                     time_str = datetime.now(timezone.utc).strftime('%H:%M:%S')

@@ -22,6 +22,13 @@
     }
   },
   "_giai_thich_tham_so": {
+    "trade_mode": "hedge = vao 2 chan Base/Diff nhu hien tai; single = van lay tin hieu tu Base/Diff nhung chi vao/ra lenh tren san trong execution",
+    "execution": "cum cau hinh chi dung khi trade_mode = single",
+    "execution.exchange": "ten san duoc phep vao lenh o che do single; bat buoc phai trung base_exchange hoac diff_exchange",
+    "execution.symbol": "ma giao dich duoc phep vao lenh o che do single; bat buoc phai trung symbol cua chan execution",
+    "execution.volume": "khoi luong vao lenh cho san execution trong che do single; neu khong khai bao thi fallback volume_base neu execution la Base, volume_diff neu execution la Diff",
+    "single_mapping": "neu execution la Base: TH1=SELL Base, TH2=BUY Base; neu execution la Diff: TH1=BUY Diff, TH2=SELL Diff",
+    "single_close": "che do single dong lenh bang ticket tren san execution; khong ghep cap va khong cat chan doi ung",
     "max_tick_delay": "thời gian tối đa 1 tick, phòng sàn treo, rớt mạng, giá không chạy",
     "cooldown_second": "thời gian chờ giữa các lệnh mở, để tránh sàn xét lỗi HFT",
     "cooldown_close_second": "thời gian chờ giữa các lệnh đóng, để tránh sàn xét lỗi HFT",
@@ -39,6 +46,13 @@
   "danh_sach_cap": [
     {
       "id": "XAUUSD_TICKMILL_EXNESS",
+      "trade_mode": "hedge",
+      "execution": {
+        "_ghichu": "Chi dung khi trade_mode = single. exchange/symbol phai trung voi base hoac diff.",
+        "exchange": "TICKMILL",
+        "symbol": "XAUUSD",
+        "volume": 0.01
+      },
       "stable_mode": "freeze",
       "standard_name": "XAUUSD", 
       "base_exchange": "TICKMILL",

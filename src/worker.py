@@ -303,6 +303,11 @@ def thuc_thi_chi_thi(chi_thi, current_tick):
                     "job_id": job_id,
                     "role": chi_thi.get("role", "UNKNOWN"),
                     "ticket": result.order,
+                    "trade_mode": context.get("trade_mode", "hedge"),
+                    "execution_exchange": context.get("execution_exchange", args.broker),
+                    "execution_symbol": context.get("execution_symbol", args.symbol),
+                    "execution_role": context.get("execution_role", chi_thi.get("role", "UNKNOWN")),
+                    "execution_action": context.get("execution_action", action),
                     "chenh_vao": context.get("chenh_vao", 0),
                     "chenh_vao_raw": context.get("chenh_vao_raw", context.get("chenh_vao", 0)),
                     "tinh_chat_vao": context.get("tinh_chat_vao", "UNKNOWN"),
@@ -462,7 +467,15 @@ try:
             current_len = len(positions) if positions else 0
             if current_len != last_len_positions:
                 if positions:
-                    danh_sach_ticket = [{"ticket": pos.ticket, "time_msc": pos.time_update_msc if hasattr(pos, 'time_update_msc') else pos.time_msc} for pos in positions]
+                    danh_sach_ticket = [
+                        {
+                            "ticket": pos.ticket,
+                            "time_msc": pos.time_update_msc if hasattr(pos, 'time_update_msc') else pos.time_msc,
+                            "side": "BUY" if pos.type == mt5.ORDER_TYPE_BUY else "SELL",
+                            "volume": pos.volume,
+                        }
+                        for pos in positions
+                    ]
                 else:
                     danh_sach_ticket = []
                 r_set(REDIS_POS_KEY, json_dumps(danh_sach_ticket))
