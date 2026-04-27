@@ -35,11 +35,28 @@ try:
     mt5_path = config['brokers'][args.broker]['path']
     redis_conf = config['redis']
     
-    cap_cfg = next((cap for cap in config['danh_sach_cap'] if 
-                   (cap['base_exchange'] == args.broker and cap['base_symbol'] == args.symbol) or 
-                   (cap['diff_exchange'] == args.broker and cap['diff_symbol'] == args.symbol)), None)
-    
-    alert_equity = cap_cfg.get('alert_equity', 0) if cap_cfg else 0
+    worker_key = (args.broker.upper(), args.symbol.upper())
+    matching_caps = [
+        cap for cap in config['danh_sach_cap']
+        if (cap['base_exchange'].upper(), cap['base_symbol'].upper()) == worker_key
+        or (cap['diff_exchange'].upper(), cap['diff_symbol'].upper()) == worker_key
+    ]
+    cap_cfg = matching_caps[0] if matching_caps else None
+
+    alert_equity_candidates = []
+    for cap in matching_caps:
+        trade_mode = str(cap.get('trade_mode', 'hedge')).strip().lower()
+        if trade_mode == 'single':
+            execution = cap.get('execution') or {}
+            execution_key = (
+                str(execution.get('exchange', '')).strip().upper(),
+                str(execution.get('symbol', '')).strip().upper()
+            )
+            if execution_key != worker_key:
+                continue
+        alert_equity_candidates.append(cap.get('alert_equity', 0))
+
+    alert_equity = max(alert_equity_candidates) if alert_equity_candidates else 0
     
     # 🌟 LẤY TÊN VPS VÀ GẮN BIỂN SỐ CHO WORKER
     vps_name = config.get('vps_name', 'LOCAL') 
