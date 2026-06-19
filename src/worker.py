@@ -150,7 +150,7 @@ else:
 gui_mode = config.get('gui_mode', False)
 dom_trader = None
 if gui_mode:
-    dom_trader = DomTrader(bot_name)
+    dom_trader = DomTrader(args.symbol, bot_name)
     dom_trader.khoi_tao()
 
 # ==========================================

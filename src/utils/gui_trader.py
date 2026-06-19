@@ -76,6 +76,41 @@ def _random_delay(min_ms=5, max_ms=30):
 # ==========================================
 # TIM CUA SO DOM
 # ==========================================
+def _tach_symbol_tu_title(title):
+    """
+    Tach ten symbol tu tieu de cua so DOM tren MT5.
+    
+    Cac dang tieu de thuong gap:
+      - "XAUUSD, Gold Spot"          -> XAUUSD
+      - "XAUUSD, Gold vs US Dollar"  -> XAUUSD
+      - "BTCUSD"                     -> BTCUSD
+      - "Depth of Market - XAUUSD"   -> XAUUSD  (MT5 ban cu)
+      - "DOM XAUUSD"                 -> XAUUSD  (MT5 ban cu)
+      
+    Returns:
+        Ten symbol (UPPER) hoac chuoi rong neu khong tach duoc.
+    """
+    t = title.strip()
+    if not t:
+        return ""
+    
+    t_upper = t.upper()
+    
+    # Dang 1: "Depth of Market - XAUUSD..."
+    for prefix in ["DEPTH OF MARKET - ", "DEPTH OF MARKET -", "DOM "]:
+        if t_upper.startswith(prefix):
+            t_upper = t_upper[len(prefix):].strip()
+            break
+    
+    # Cat phan mo ta sau dau phay: "XAUUSD, Gold Spot" -> "XAUUSD"
+    symbol_part = t_upper.split(',')[0].strip()
+    
+    # Cat phan mo ta sau khoang trang dau tien (neu con): "XAUUSD Gold" -> "XAUUSD"
+    symbol_part = symbol_part.split()[0].strip() if symbol_part else ""
+    
+    return symbol_part
+
+
 def tim_dom_window(symbol):
     """
     Tim cua so Depth of Market (DOM) dang mo cho symbol chi dinh.
@@ -88,17 +123,29 @@ def tim_dom_window(symbol):
     """
     symbol_upper = symbol.upper()
     result = []
+    all_miniframes = []  # Luu tat ca MiniFrame de debug
 
     def enum_cb(hwnd, lParam):
         if _is_visible(hwnd):
             cls = _get_class_name(hwnd)
             if "MiniFrame" in cls:
                 title = _get_window_text(hwnd)
-                if symbol_upper in title.upper():
+                extracted = _tach_symbol_tu_title(title)
+                all_miniframes.append((hwnd, title, extracted))
+                if extracted == symbol_upper:
                     result.append(hwnd)
         return True
 
     user32.EnumWindows(EnumWindowsProc(enum_cb), 0)
+    
+    # Debug log khi khong tim thay
+    if not result and all_miniframes:
+        print(f"[GUI DEBUG] Tim thay {len(all_miniframes)} cua so MiniFrame, nhung KHONG co cai nao khop '{symbol_upper}':")
+        for hwnd, title, extracted in all_miniframes:
+            print(f"  - 0x{hwnd:08X} Title='{title}' -> Symbol='{extracted}'")
+    elif not result:
+        print(f"[GUI DEBUG] Khong tim thay bat ky cua so MiniFrame nao tren man hinh!")
+    
     return result[0] if result else None
 
 
