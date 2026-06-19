@@ -3,6 +3,7 @@ import ujson as json
 import subprocess
 import time
 import os
+import redis
 
 # Đổi tên cửa sổ chính của Launcher cho ngầu
 os.system("title 🚀 TRUNG TÂM CHỈ HUY - BOT ARBITRAGE")
@@ -18,6 +19,19 @@ except Exception as e:
     quit()
 
 danh_sach_cap = config.get('danh_sach_cap', [])
+
+try:
+    redis_conf = config['redis']
+    redis.Redis(
+        host=redis_conf['host'],
+        port=redis_conf['port'],
+        db=redis_conf['db'],
+        decode_responses=True,
+        socket_timeout=2.0,
+        socket_connect_timeout=2.0,
+    ).delete("SIGNAL:SHUTDOWN")
+except Exception as e:
+    print(f"⚠️ Không xóa được SIGNAL:SHUTDOWN cũ trong Redis: {e}")
 
 # ==========================================
 # 0. BẬT ĐƯỜNG DÂY NÓNG TELEGRAM ĐẦU TIÊN
@@ -71,7 +85,7 @@ for cap in danh_sach_cap:
         print(f"❌ trade_mode không hợp lệ cho {pair_id}: {trade_mode}")
         quit()
     master_script = 'src/master_single.py' if trade_mode == 'single' else 'src/mastery.py'
-    print(f"   👉 Đang gọi Master cho cặp: {pair_id}")
+    print(f"   👉 Đang gọi Master cho cặp: {pair_id} | mode={trade_mode} | script={master_script}")
     subprocess.Popen(
         ['cmd', '/k', 'python', master_script, '--pair_id', pair_id], 
         creationflags=subprocess.CREATE_NEW_CONSOLE

@@ -8,6 +8,7 @@ import threading
 from collections import deque
 from concurrent.futures import ThreadPoolExecutor
 from utils.terminal import dan_tran_cua_so
+from utils.gui_trader import DomTrader
 
 # ==========================================
 # 1. ĐỌC THAM SỐ TỪ TERMINAL
@@ -144,6 +145,30 @@ else:
     quit()
 
 # ==========================================
+# KHỞI TẠO DOM TRADER (NẾU GUI_MODE BẬT)
+# ==========================================
+gui_mode = config.get('gui_mode', False)
+dom_trader = None
+if gui_mode:
+    dom_trader = DomTrader(bot_name)
+    dom_trader.khoi_tao()
+
+# ==========================================
+# HÀM HỖ TRỢ: CHỜ TICKET MỚI (CHO DOM)
+# ==========================================
+def cho_doi_ticket_moi(positions_truoc, timeout_ms=5000):
+    truoc_tickets = {p.ticket for p in positions_truoc} if positions_truoc else set()
+    t_start = time.perf_counter()
+    while (time.perf_counter() - t_start) * 1000 < timeout_ms:
+        hien_tai = mt5.positions_get(symbol=args.symbol)
+        if hien_tai:
+            for p in hien_tai:
+                if p.ticket not in truoc_tickets:
+                    return p.ticket
+        time.sleep(0.005)
+    return None
+
+# ==========================================
 # HÀM HỖ TRỢ: BỌc ThreadPool chống nuốt exception
 # ==========================================
 def safe_submit(fn, *args):
@@ -158,7 +183,7 @@ def safe_submit(fn, *args):
 # ==========================================
 # HÀM HỖ TRỢ: ĐÓNG 1 LỆNH (DÙNG CHO THREAD)
 # ==========================================
-def thuc_thi_dong_1_lenh(pos, current_tick, comment, chi_thi):
+def thuc_thi_dong_1_lenh(pos, current_tick, comment, chi_thi, use_dom=False):
     close_type = mt5.ORDER_TYPE_SELL if pos.type == mt5.ORDER_TYPE_BUY else mt5.ORDER_TYPE_BUY
     price = current_tick.bid if close_type == mt5.ORDER_TYPE_SELL else current_tick.ask
     
@@ -174,12 +199,47 @@ def thuc_thi_dong_1_lenh(pos, current_tick, comment, chi_thi):
         "type_time": mt5.ORDER_TIME_GTC,
         "type_filling": CACHED_FILLING_MODE,
     }
-    # if comment: request["comment"] = comment
+    
+    thanh_cong = False
+    retcode = -1
+    comment_loi = ""
     
     with mt5_lock: 
-        result = mt5.order_send(request)
+        # 1. Thu DOM truoc
+        if use_dom and gui_mode and dom_trader and dom_trader.kiem_tra_dom_con_song():
+            print(f"🖱️ {bot_name} Dùng DOM click CLOSE lệnh #{pos.ticket}...")
+            click_ok = dom_trader.close_position()
+            if click_ok:
+                t_start = time.perf_counter()
+                da_dong = False
+                while (time.perf_counter() - t_start) * 1000 < 5000:
+                    hien_tai = mt5.positions_get(ticket=pos.ticket)
+                    if not hien_tai:
+                        da_dong = True
+                        break
+                    time.sleep(0.005)
+                
+                if da_dong:
+                    thanh_cong = True
+                    print(f"⚡ {bot_name} DOM Click CLOSE THANH CONG! Lệnh #{pos.ticket} đã biến mất")
+                else:
+                    comment_loi = "DOM Click CLOSE OK nhung lenh chua bien mat sau 5s"
+                    print(f"❌ {bot_name} LỖI: {comment_loi}")
+            else:
+                comment_loi = "DOM Click CLOSE FAIL (Khong click duoc)"
+                print(f"❌ {bot_name} LỖI: {comment_loi}")
+                
+        # 2. Fallback API
+        if not thanh_cong and (not use_dom or not gui_mode or not dom_trader or not dom_trader.kiem_tra_dom_con_song()):
+            if use_dom and gui_mode: print(f"⚠️ {bot_name} DOM khong kha dung! Fallback sang API...")
+            result = mt5.order_send(request)
+            if result.retcode == mt5.TRADE_RETCODE_DONE:
+                thanh_cong = True
+            else:
+                retcode = result.retcode
+                comment_loi = result.comment
         
-    if result.retcode == mt5.TRADE_RETCODE_DONE:
+    if thanh_cong:
         print(f"💰 {bot_name} ĐÃ ĐÓNG LỆNH #{pos.ticket}. Đang đợi sàn chốt sổ...")
         
         # 👉 VÒNG LẶP SĂN MỒI CHỜ LỊCH SỬ (Tối đa 5 giây)
@@ -230,7 +290,7 @@ def thuc_thi_dong_1_lenh(pos, current_tick, comment, chi_thi):
             
     else:
         # 🛡️ VẪN GỬi biên lai khi lệnh đóng FAIL để accountant không kẹt
-        print(f"❌ {bot_name} LỖI ĐÓNG LỆNH #{pos.ticket}: {result.comment}")
+        print(f"❌ {bot_name} LỖI ĐÓNG LỆNH #{pos.ticket}: {comment_loi} ({retcode})")
         bien_lai = {
             "role": chi_thi.get("role", "UNKNOWN"),
             "ticket": pos.ticket,
@@ -240,7 +300,10 @@ def thuc_thi_dong_1_lenh(pos, current_tick, comment, chi_thi):
             "context": chi_thi.get("context", {})
         }
         r.lpush("QUEUE:ACCOUNTANT", json.dumps(bien_lai))
-        r.lpush(QUEUE_TELEGRAM, f"❌ <b>{bot_name} LỖI ĐÓNG LỆNH</b>\nTicket: #{pos.ticket} | Lỗi: {result.comment}")
+        try:
+            r_lpush(QUEUE_TELEGRAM, f"❌ <b>{bot_name} LỖI ĐÓNG LỆNH</b>\nTicket: #{pos.ticket} | Lỗi: {retcode} - {comment_loi}")
+        except Exception:
+            pass
 
 # ==========================================
 # HÀM HỖ TRỢ: ĐỒNG BỘ LỊCH SỬ (CHO LỆNH STOPOUT)
@@ -306,12 +369,42 @@ def thuc_thi_chi_thi(chi_thi, current_tick):
         }
         # if comment: request["comment"] = comment
         
-        with mt5_lock: 
-            result = mt5.order_send(request)
+        thanh_cong = False
+        ticket_moi = None
+        retcode = -1
+        comment_loi = ""
+
+        with mt5_lock:
+            # 1. Thu DOM truoc neu duoc bat
+            if gui_mode and dom_trader and dom_trader.kiem_tra_dom_con_song():
+                print(f"🖱️ {bot_name} Dùng DOM click {action} {volume} LOT...")
+                pos_truoc = mt5.positions_get(symbol=args.symbol)
+                click_ok = dom_trader.thuc_thi_lenh(action, volume)
+                if click_ok:
+                    ticket_moi = cho_doi_ticket_moi(pos_truoc, timeout_ms=5000)
+                    if ticket_moi:
+                        thanh_cong = True
+                        print(f"⚡ {bot_name} DOM Click THANH CONG! Ticket: {ticket_moi}")
+                    else:
+                        comment_loi = "DOM Click OK nhung khong thay ticket xuat hien sau 5s"
+                        print(f"❌ {bot_name} LỖI: {comment_loi}")
+                else:
+                    comment_loi = "DOM Click FAIL (Khong click duoc)"
+                    print(f"❌ {bot_name} LỖI: {comment_loi}")
             
-        if result.retcode == mt5.TRADE_RETCODE_DONE:
-            print(f"🔫 {bot_name} ĐÃ BẮN {action} {volume} LOT. Ticket: {result.order}")
+            # 2. Fallback API neu DOM that bai
+            if not thanh_cong and ticket_moi is None and (not gui_mode or not dom_trader or not dom_trader.kiem_tra_dom_con_song()):
+                if gui_mode: print(f"⚠️ {bot_name} DOM khong kha dung! Fallback sang API...")
+                result = mt5.order_send(request)
+                if result.retcode == mt5.TRADE_RETCODE_DONE:
+                    thanh_cong = True
+                    ticket_moi = result.order
+                    print(f"🔫 {bot_name} ĐÃ BẮN {action} {volume} LOT (API). Ticket: {ticket_moi}")
+                else:
+                    retcode = result.retcode
+                    comment_loi = result.comment
             
+        if thanh_cong:
             # 👉 BÁO CÁO KẾT QUẢ GIAO VIỆC LÊN CHO KẾ TOÁN (JOB_ID)
             context = chi_thi.get("context", {})
             job_id = context.get("job_id")
@@ -319,7 +412,7 @@ def thuc_thi_chi_thi(chi_thi, current_tick):
                 report = {
                     "job_id": job_id,
                     "role": chi_thi.get("role", "UNKNOWN"),
-                    "ticket": result.order,
+                    "ticket": ticket_moi,
                     "trade_mode": context.get("trade_mode", "hedge"),
                     "execution_exchange": context.get("execution_exchange", args.broker),
                     "execution_symbol": context.get("execution_symbol", args.symbol),
@@ -341,8 +434,11 @@ def thuc_thi_chi_thi(chi_thi, current_tick):
                     r_lpush(f"QUEUE:ORDER_RESULT:{pair_id}", json_dumps(report))
                     
         else:
-            print(f"❌ {bot_name} LỖI VÀO LỆNH {action}: {result.comment} ({result.retcode})")
-            r_lpush(QUEUE_TELEGRAM, f"❌ <b>{bot_name} LỖI {action}</b>\nMã lỗi: {result.retcode} - {result.comment}")
+            print(f"❌ {bot_name} LỖI VÀO LỆNH {action}: {comment_loi} ({retcode})")
+            try:
+                r_lpush(QUEUE_TELEGRAM, f"❌ <b>{bot_name} LỖI {action}</b>\nMã lỗi: {retcode} - {comment_loi}")
+            except Exception:
+                pass
 
     elif action == "CLOSE_OLDEST":
         count = chi_thi.get("count", 1)
@@ -353,7 +449,7 @@ def thuc_thi_chi_thi(chi_thi, current_tick):
             lenh_can_dong = lenh_sap_xep[:count] 
             
             for pos in lenh_can_dong:
-                safe_submit(thuc_thi_dong_1_lenh, pos, current_tick, comment, chi_thi)
+                safe_submit(thuc_thi_dong_1_lenh, pos, current_tick, comment, chi_thi, True)
 
     # 👉 THÊM CHIÊU CHÉM ĐÍCH DANH VÀO DƯỚI CÙNG HÀM thuc_thi_chi_thi
     elif action == "CLOSE_BY_TICKET":
@@ -362,7 +458,7 @@ def thuc_thi_chi_thi(chi_thi, current_tick):
         positions = mt5.positions_get(ticket=ticket_can_dong) 
         if positions:
             # Tìm thấy thì ném cho Thread phụ đi chém
-            safe_submit(thuc_thi_dong_1_lenh, positions[0], current_tick, comment, chi_thi)
+            safe_submit(thuc_thi_dong_1_lenh, positions[0], current_tick, comment, chi_thi, False)
         else:
             # 🛡️ VẪN GỬi biên lai khi position không tồn tại để accountant không kẹt
             print(f"⚠️ {bot_name} Ticket #{ticket_can_dong} không tìm thấy trên sàn. Gửi biên lai rỗng.")

@@ -65,6 +65,16 @@
       "deviation_entry": 0.20,
       "deviation_close": 0.09,
       "spread_pivot": 0.0,
+      "spread_pivot_auto": {
+        "enabled": false,
+        "api_url": "http://MATRIX_THONGKE_VPS_IP:8787/api/spread-summary",
+        "auth_token": "change-me-report-api-token",
+        "product_id": "XAU",
+        "route_base_to_diff": "BrokerA->BrokerB",
+        "route_diff_to_base": "BrokerB->BrokerA",
+        "refresh_second": 60,
+        "timeout_second": 10
+      },
       "stable_time": 300,
       "cooldown_second": 60,
       "cooldown_close_second": 3,

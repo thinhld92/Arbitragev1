@@ -11,6 +11,10 @@ import redis
 import ujson as json
 
 from utils.terminal import dan_tran_cua_so
+from utils.spread_pivot_provider import (
+    dong_bo_spread_pivot_tu_api,
+    lay_chu_ky_cap_nhat_spread_pivot,
+)
 from utils.trading_logic import check_tin_hieu_arbitrage, lay_spread_pivot
 
 
@@ -260,6 +264,8 @@ SHUTDOWN_KEY = "SIGNAL:SHUTDOWN"
 dev_entry = cap_hien_tai["deviation_entry"]
 dev_close = cap_hien_tai["deviation_close"]
 spread_pivot = lay_spread_pivot(cap_hien_tai)
+spread_pivot_source = "config"
+spread_pivot_detail = ""
 stable_time_sec = cap_hien_tai.get("stable_time", 0) / 1000.0
 cooldown_sec = cap_hien_tai["cooldown_second"]
 cooldown_close_sec = cap_hien_tai.get("cooldown_close_second", 2)
@@ -272,6 +278,8 @@ filter_entry = cap_hien_tai.get("filter_entry", "nguoc")
 filter_close = cap_hien_tai.get("filter_close", "none")
 max_tick_hz_base = cap_hien_tai.get("max_tick_hz_base", 0)
 max_tick_hz_diff = cap_hien_tai.get("max_tick_hz_diff", 0)
+spread_pivot_refresh_second = lay_chu_ky_cap_nhat_spread_pivot(cap_hien_tai)
+last_spread_pivot_refresh = 0.0
 
 saved_state_raw = r.get(key_state)
 if saved_state_raw:
@@ -314,6 +322,7 @@ def reload_runtime_config(new_cap):
     global dev_entry, dev_close, spread_pivot, stable_time_sec, cooldown_sec
     global cooldown_close_sec, max_orders, hold_time_sec, alert_equity, stable_mode
     global max_tick_delay, filter_entry, filter_close, max_tick_hz_base, max_tick_hz_diff
+    global spread_pivot_refresh_second
 
     new_execution = resolve_execution(new_cap)
     old_exec_key = (execution["exchange"], execution["symbol"])
@@ -339,6 +348,38 @@ def reload_runtime_config(new_cap):
     filter_close = cap_hien_tai.get("filter_close", "none")
     max_tick_hz_base = cap_hien_tai.get("max_tick_hz_base", 0)
     max_tick_hz_diff = cap_hien_tai.get("max_tick_hz_diff", 0)
+    spread_pivot_refresh_second = lay_chu_ky_cap_nhat_spread_pivot(cap_hien_tai)
+
+
+def refresh_runtime_spread_pivot(reason, force_log=False):
+    global spread_pivot, spread_pivot_source, spread_pivot_detail
+    global spread_pivot_refresh_second, last_spread_pivot_refresh
+
+    new_spread_pivot, new_source, new_detail = dong_bo_spread_pivot_tu_api(
+        cap_hien_tai
+    )
+    spread_pivot_refresh_second = lay_chu_ky_cap_nhat_spread_pivot(cap_hien_tai)
+    last_spread_pivot_refresh = time.time()
+
+    changed = (
+        abs(new_spread_pivot - spread_pivot) > 1e-9
+        or new_source != spread_pivot_source
+        or new_detail != spread_pivot_detail
+    )
+    spread_pivot = new_spread_pivot
+    spread_pivot_source = new_source
+    spread_pivot_detail = new_detail
+    cap_hien_tai["spread_pivot"] = spread_pivot
+
+    if force_log or changed:
+        message = (
+            f"[PIVOT AUTO] {reason}: pivot {spread_pivot:+.2f} "
+            f"| source={spread_pivot_source}"
+        )
+        if spread_pivot_detail:
+            message += f" | {spread_pivot_detail}"
+        print(message)
+        logging.info(message)
 
 
 def gui_lenh_dong(order_data, close_data, comment):
@@ -388,6 +429,7 @@ print(
     f"role={execution['role']} volume={execution['volume']}"
 )
 logging.info("=== START MASTER SINGLE %s ===", args.pair_id)
+refresh_runtime_spread_pivot("startup", force_log=True)
 
 try:
     while True:
@@ -413,7 +455,17 @@ try:
                         config = load_config()
                         new_cap = find_pair(config, args.pair_id)
                         if new_cap:
+                            new_mode = normalize_mode(new_cap)
+                            if new_mode != "single":
+                                msg_mode = (
+                                    f"[MODE] {args.pair_id} doi sang trade_mode={new_mode}. "
+                                    "Hay tat/bat launcher de chuyen master."
+                                )
+                                print(msg_mode)
+                                logging.error(msg_mode)
+                                break
                             reload_runtime_config(new_cap)
+                            refresh_runtime_spread_pivot("hot-reload")
                             last_config_modified = current_modified
                             print(
                                 f"[HOT RELOAD SINGLE] {dev_entry}|{dev_close}, pivot {spread_pivot:+.2f}, "
@@ -431,6 +483,12 @@ try:
                     except Exception as exc:
                         print(f"[HOT RELOAD SINGLE] Loi config, giu cau hinh cu: {exc}")
                         logging.error("[HOT RELOAD SINGLE] Loi config: %s", exc)
+
+                if (
+                    spread_pivot_refresh_second > 0
+                    and now_sec - last_spread_pivot_refresh >= spread_pivot_refresh_second
+                ):
+                    refresh_runtime_spread_pivot("interval")
 
             trong_gio_cam = kiem_tra_gio_cam(cap_hien_tai.get("force_close_hours", []), current_utc_time_str)
 

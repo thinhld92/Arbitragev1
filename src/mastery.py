@@ -10,6 +10,10 @@ from datetime import datetime, timezone
 import ctypes
 
 # Import Quân Sư
+from utils.spread_pivot_provider import (
+    dong_bo_spread_pivot_tu_api,
+    lay_chu_ky_cap_nhat_spread_pivot,
+)
 from utils.trading_logic import check_tin_hieu_arbitrage 
 from utils.terminal import dan_tran_cua_so
 
@@ -61,6 +65,18 @@ def tao_snapshot_cau_hinh(config_cap):
         "stable_time": config_cap.get('stable_time', 0),
     }
 
+
+last_skip_log = {}
+
+
+def log_skip_once(key, message, interval=10.0):
+    now = time.time()
+    if now - last_skip_log.get(key, 0) < interval:
+        return
+    last_skip_log[key] = now
+    print(message)
+    logging.info(message)
+
 # 🌟 LẤY TÊN VPS VÀ TẠO BIỂN TÊN CHO MASTER
 vps_name = config.get('vps_name', 'LOCAL')
 master_name = f"[{vps_name} | {args.pair_id}]"
@@ -84,6 +100,12 @@ if cap_hien_tai is None:
     print(f"❌ LỖI: Không tìm thấy ID {args.pair_id} trong {CONFIG_FILE}!")
     quit()
 
+trade_mode_hien_tai = str(cap_hien_tai.get('trade_mode', 'hedge')).strip().lower()
+if trade_mode_hien_tai != 'hedge':
+    print(f"[MODE] {args.pair_id} dang la trade_mode={trade_mode_hien_tai}; mastery.py chi chay hedge.")
+    logging.error("[MODE] Sai master: trade_mode=%s cho %s", trade_mode_hien_tai, args.pair_id)
+    quit()
+
 key_base = f"TICK:{cap_hien_tai['base_exchange'].upper()}:{cap_hien_tai['base_symbol'].upper()}"
 key_diff = f"TICK:{cap_hien_tai['diff_exchange'].upper()}:{cap_hien_tai['diff_symbol'].upper()}"
 key_pos_base = f"POSITION:{cap_hien_tai['base_exchange'].upper()}:{cap_hien_tai['base_symbol'].upper()}"
@@ -95,6 +117,8 @@ key_state = f"STATE:MASTER:{args.pair_id}"
 dev_entry = cap_hien_tai['deviation_entry']
 dev_close = cap_hien_tai['deviation_close']
 spread_pivot = lay_spread_pivot(cap_hien_tai)
+spread_pivot_source = "config"
+spread_pivot_detail = ""
 stable_time_sec = cap_hien_tai['stable_time'] / 1000.0  
 cooldown_close_sec = cap_hien_tai.get('cooldown_close_second', 2)
 cooldown_sec = cap_hien_tai['cooldown_second']
@@ -114,6 +138,8 @@ orphan_cooldown_second = cap_hien_tai.get('orphan_cooldown_second', 1800)
 # 🛡️ CẦU DAO TẦN SUẤT TICK
 max_tick_hz_base = cap_hien_tai.get('max_tick_hz_base', 0)
 max_tick_hz_diff = cap_hien_tai.get('max_tick_hz_diff', 0)
+spread_pivot_refresh_second = lay_chu_ky_cap_nhat_spread_pivot(cap_hien_tai)
+last_spread_pivot_refresh = 0.0
 
 # ==========================================
 # 2. KHÔI PHỤC TRÍ NHỚ (SỔ CÁI) TỪ REDIS
@@ -169,6 +195,37 @@ def luu_tri_nho():
     }
     r.set(key_state, json.dumps(state))
 
+
+def refresh_runtime_spread_pivot(reason, force_log=False):
+    global spread_pivot, spread_pivot_source, spread_pivot_detail
+    global spread_pivot_refresh_second, last_spread_pivot_refresh
+
+    new_spread_pivot, new_source, new_detail = dong_bo_spread_pivot_tu_api(
+        cap_hien_tai
+    )
+    spread_pivot_refresh_second = lay_chu_ky_cap_nhat_spread_pivot(cap_hien_tai)
+    last_spread_pivot_refresh = time.time()
+
+    changed = (
+        abs(new_spread_pivot - spread_pivot) > 1e-9
+        or new_source != spread_pivot_source
+        or new_detail != spread_pivot_detail
+    )
+    spread_pivot = new_spread_pivot
+    spread_pivot_source = new_source
+    spread_pivot_detail = new_detail
+    cap_hien_tai["spread_pivot"] = spread_pivot
+
+    if force_log or changed:
+        message = (
+            f"[PIVOT AUTO] {reason}: pivot {spread_pivot:+.2f} "
+            f"| source={spread_pivot_source}"
+        )
+        if spread_pivot_detail:
+            message += f" | {spread_pivot_detail}"
+        print(message)
+        logging.info(message)
+
 def kiem_tra_gio_giao_dich(trading_hours, current_time_str):
     if not trading_hours: return True 
     for khung_gio in trading_hours:
@@ -215,6 +272,7 @@ thoi_diem_spam_tram_cuoi = 0
 print(f"🚀 MASTER {args.pair_id} SẴN SÀNG CHIẾN ĐẤU (SELF-HEALING + BLACKOUT GUILLOTINE)!")
 
 # --- Startup Grace Period ---
+refresh_runtime_spread_pivot("startup", force_log=True)
 startup_time = time.time()
 STARTUP_GRACE_SECOND = cap_hien_tai.get('startup_grace_second', 15)
 
@@ -274,6 +332,12 @@ try:
                     with open(CONFIG_FILE, 'r', encoding='utf-8') as f: config = json.load(f)
                     cap_hien_tai = next((cap for cap in config['danh_sach_cap'] if cap['id'] == args.pair_id), None)
                     if cap_hien_tai:
+                        trade_mode_hien_tai = str(cap_hien_tai.get('trade_mode', 'hedge')).strip().lower()
+                        if trade_mode_hien_tai != 'hedge':
+                            msg_mode = f"[MODE] {args.pair_id} doi sang trade_mode={trade_mode_hien_tai}. Hay tat/bat launcher de chuyen master."
+                            print(msg_mode)
+                            logging.error(msg_mode)
+                            break
                         dev_entry = cap_hien_tai['deviation_entry']
                         dev_close = cap_hien_tai['deviation_close']
                         spread_pivot = lay_spread_pivot(cap_hien_tai)
@@ -294,6 +358,8 @@ try:
                         orphan_cooldown_second = cap_hien_tai.get('orphan_cooldown_second', 1800) 
                         max_tick_hz_base = cap_hien_tai.get('max_tick_hz_base', 0)
                         max_tick_hz_diff = cap_hien_tai.get('max_tick_hz_diff', 0)
+                        spread_pivot_refresh_second = lay_chu_ky_cap_nhat_spread_pivot(cap_hien_tai)
+                        refresh_runtime_spread_pivot("hot-reload")
                     last_config_modified = current_modified
                     
                     vol_b = cap_hien_tai.get('volume_base', 0.01)
@@ -313,6 +379,12 @@ try:
                     logging.info(msg_reload_log)
                 except Exception as e:
                     pass
+
+                if (
+                    spread_pivot_refresh_second > 0
+                    and now_sec - last_spread_pivot_refresh >= spread_pivot_refresh_second
+                ):
+                    refresh_runtime_spread_pivot("interval")
 
             # ⚡ Kiểm tra xem có đang bị vướng vào "Giờ Tử Thần" không?
             trong_gio_cam = kiem_tra_gio_cam(cap_hien_tai.get('force_close_hours', []), current_utc_time_str)
@@ -795,6 +867,18 @@ try:
             tin_hieu = check_tin_hieu_arbitrage(tick_base, tick_diff, cap_hien_tai, huong_dang_danh) 
             hanh_dong = tin_hieu["hanh_dong"]
 
+            if hanh_dong == "CHO_DOI":
+                log_skip_once(
+                    "wait_signal",
+                    (
+                        f"[HEDGE WAIT] Chua co tin hieu vao/dong. "
+                        f"TH1={tin_hieu.get('chenh_th1', 0):.2f}/{dev_entry} "
+                        f"TH2={tin_hieu.get('chenh_th2', 0):.2f}/{dev_entry} "
+                        f"pivot={tin_hieu.get('spread_pivot', spread_pivot):+.2f}"
+                    ),
+                    15.0,
+                )
+
             # ⏱️ LOGIC ĐỒNG HỒ CÁT (Tích lũy chênh lệch)
             if hanh_dong == "VAO_LENH":
                 if thoi_diem_bat_dau_lech_vao == 0: 
@@ -950,20 +1034,25 @@ try:
             elif hanh_dong == "VAO_LENH":
                 # 🛡️ CẦU DAO TICK HZ: Chặn vào lệnh khi tick quá dày
                 if tick_hz_vuot_nguong:
+                    log_skip_once("entry_tick_hz", f"[HEDGE BLOCK] Tick Hz vuot nguong: Base {hz_base} | Diff {hz_diff} (max {max_tick_hz_base}|{max_tick_hz_diff})", 10.0)
                     print(f"⚡ [TICK HZ] Khóa vào lệnh! Base {hz_base} | Diff {hz_diff} t/p (Max: {max_tick_hz_base}|{max_tick_hz_diff})   ", end='\r')
                     continue
 
                 # 🔌 CHECK CẦU DAO
                 if time.time() < thoi_diem_mo_khoa_cau_dao:
                     thoi_gian_con_lai = int(thoi_diem_mo_khoa_cau_dao - time.time())
+                    log_skip_once("entry_circuit", f"[HEDGE BLOCK] Cau dao dang khoa, con {thoi_gian_con_lai}s.", 10.0)
                     print(f"🔌 [CẦU DAO] Đang tạm khóa do thiếu hụt thanh khoản. Mở lại sau: {thoi_gian_con_lai}s   ", end='\r')
                     continue
 
                 if equity_base < alert_equity or equity_diff < alert_equity:
+                    log_skip_once("entry_low_equity", f"[HEDGE BLOCK] Low equity: Base {equity_base:.2f} | Diff {equity_diff:.2f} < {alert_equity}", 10.0)
                     print(f"🛑 [LOW EQUITY] KHÓA MỞ LỆNH MỚI! Base {equity_base:.2f}$ | Diff {equity_diff:.2f}$   ", end='\r')
                     continue 
                 
-                if not kiem_tra_gio_giao_dich(cap_hien_tai.get('trading_hours', []), current_utc_time_str): continue
+                if not kiem_tra_gio_giao_dich(cap_hien_tai.get('trading_hours', []), current_utc_time_str):
+                    log_skip_once("entry_hours", f"[HEDGE BLOCK] Ngoai gio trading UTC {current_utc_time_str}.", 10.0)
+                    continue
 
                 loai_lenh_moi = tin_hieu["loai_lenh"] 
                 
@@ -971,8 +1060,16 @@ try:
                 so_lenh_hien_tai = len(lich_su_vao_lenh)
                 dang_cooldown = (time.time() - thoi_diem_vao_lenh_cuoi) < cooldown_sec
 
-                if so_lenh_hien_tai >= max_orders or dang_cooldown or (huong_dang_danh is not None and huong_dang_danh != loai_lenh_moi):
-                    pass 
+                if so_lenh_hien_tai >= max_orders:
+                    log_skip_once("entry_max_orders", f"[HEDGE BLOCK] Da dat max_orders {so_lenh_hien_tai}/{max_orders}.", 10.0)
+                    pass
+                elif dang_cooldown:
+                    con_lai = max(0, cooldown_sec - (time.time() - thoi_diem_vao_lenh_cuoi))
+                    log_skip_once("entry_cooldown", f"[HEDGE BLOCK] Cooldown vao lenh con {con_lai:.1f}s.", 10.0)
+                    pass
+                elif huong_dang_danh is not None and huong_dang_danh != loai_lenh_moi:
+                    log_skip_once("entry_direction", f"[HEDGE BLOCK] Dang giu huong {huong_dang_danh}, tin hieu moi {loai_lenh_moi}.", 10.0)
+                    pass
                 else:
                     # 🔄 CHỌN CHẾ ĐỘ BĂNG GIÁ
                     dk_thoi_gian = False
@@ -981,8 +1078,16 @@ try:
                     else: # Mặc định là 'freeze'
                         dk_thoi_gian = (time.time() - thoi_diem_nhan_tick_cuoi) >= stable_time_sec
 
-                    if dk_thoi_gian:
-                        if not da_xu_ly_vao_lenh_cho_tick_nay:
+                    if not dk_thoi_gian:
+                        wait_time = (
+                            stable_time_sec - (time.time() - thoi_diem_bat_dau_lech_vao)
+                            if stable_mode == 'continuous'
+                            else stable_time_sec - (time.time() - thoi_diem_nhan_tick_cuoi)
+                        )
+                        log_skip_once("entry_wait_stable", f"[HEDGE BLOCK] Dang doi stable {stable_mode}, con {max(0, wait_time):.3f}s.", 10.0)
+                    elif da_xu_ly_vao_lenh_cho_tick_nay:
+                        log_skip_once("entry_tick_done", "[HEDGE BLOCK] Tick nay da xu ly vao lenh, doi tick moi.", 10.0)
+                    else:
                             
                             # ==================================================
                             # 🛡️ BỘ LỌC VÀO LỆNH (THUẬN / NGƯỢC / NONE)

@@ -84,4 +84,11 @@ def check_tin_hieu_arbitrage(tick_base, tick_diff, config_cap, huong_dang_danh=N
             "spread_pivot": spread_pivot
         }
         
-    return {"hanh_dong": "CHO_DOI"}
+    return {
+        "hanh_dong": "CHO_DOI",
+        "chenh_th1": chenh_th1,
+        "chenh_th2": chenh_th2,
+        "chenh_th1_raw": chenh_th1_raw,
+        "chenh_th2_raw": chenh_th2_raw,
+        "spread_pivot": spread_pivot,
+    }
