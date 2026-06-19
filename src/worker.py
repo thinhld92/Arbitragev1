@@ -490,8 +490,12 @@ def thuc_thi_chi_thi(chi_thi, current_tick):
         # Gọi MT5 tìm đúng cái lệnh có Ticket đó
         positions = mt5.positions_get(ticket=ticket_can_dong) 
         if positions:
-            # Tìm thấy thì ném cho Thread phụ đi chém
-            safe_submit(thuc_thi_dong_1_lenh, positions[0], current_tick, comment, chi_thi, False)
+            # Phân loại: Chốt lời bình thường → DOM, Quản lý rủi ro → API
+            context = chi_thi.get("context", {})
+            action_type = context.get("action_type", "")
+            risk_actions = ("FORCE_CLOSE", "SINGLE_CLOSE", "BLACKOUT_CLOSE")
+            use_dom = action_type not in risk_actions
+            safe_submit(thuc_thi_dong_1_lenh, positions[0], current_tick, comment, chi_thi, use_dom)
         else:
             # 🛡️ VẪN GỬi biên lai khi position không tồn tại để accountant không kẹt
             print(f"⚠️ {bot_name} Ticket #{ticket_can_dong} không tìm thấy trên sàn. Gửi biên lai rỗng.")
