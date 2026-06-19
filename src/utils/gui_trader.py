@@ -73,9 +73,13 @@ def _random_delay(min_ms=5, max_ms=30):
     time.sleep(random.randint(min_ms, max_ms) / 1000.0)
 
 
-# ==========================================
-# TIM CUA SO DOM
-# ==========================================
+def _get_window_pid(hwnd):
+    """Lay PID cua process so huu cua so nay."""
+    pid = ctypes.wintypes.DWORD()
+    user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
+    return pid.value
+
+
 def _tach_symbol_tu_title(title):
     """
     Tach ten symbol tu tieu de cua so DOM tren MT5.
@@ -111,12 +115,14 @@ def _tach_symbol_tu_title(title):
     return symbol_part
 
 
-def tim_dom_window(symbol):
+def tim_dom_window(symbol, mt5_pid=None):
     """
     Tim cua so Depth of Market (DOM) dang mo cho symbol chi dinh.
     
     Args:
         symbol: Ma giao dich (VD: "XAUUSD")
+        mt5_pid: (Optional) PID cua tien trinh MT5. Neu truyen vao, chi tim
+                 DOM thuoc dung tien trinh nay (chong trung khi chay nhieu san).
         
     Returns:
         HWND cua DOM window, hoac None neu khong tim thay.
@@ -131,18 +137,24 @@ def tim_dom_window(symbol):
             if "MiniFrame" in cls:
                 title = _get_window_text(hwnd)
                 extracted = _tach_symbol_tu_title(title)
-                all_miniframes.append((hwnd, title, extracted))
+                win_pid = _get_window_pid(hwnd)
+                all_miniframes.append((hwnd, title, extracted, win_pid))
+                
+                # Kiem tra symbol khop
                 if extracted == symbol_upper:
-                    result.append(hwnd)
+                    # Neu co PID thi phai khop PID
+                    if mt5_pid is None or win_pid == mt5_pid:
+                        result.append(hwnd)
         return True
 
     user32.EnumWindows(EnumWindowsProc(enum_cb), 0)
     
     # Debug log khi khong tim thay
     if not result and all_miniframes:
-        print(f"[GUI DEBUG] Tim thay {len(all_miniframes)} cua so MiniFrame, nhung KHONG co cai nao khop '{symbol_upper}':")
-        for hwnd, title, extracted in all_miniframes:
-            print(f"  - 0x{hwnd:08X} Title='{title}' -> Symbol='{extracted}'")
+        pid_info = f" (PID filter={mt5_pid})" if mt5_pid else ""
+        print(f"[GUI DEBUG] Tim thay {len(all_miniframes)} cua so MiniFrame, nhung KHONG co cai nao khop '{symbol_upper}'{pid_info}:")
+        for hwnd, title, extracted, win_pid in all_miniframes:
+            print(f"  - 0x{hwnd:08X} PID={win_pid} Title='{title}' -> Symbol='{extracted}'")
     elif not result:
         print(f"[GUI DEBUG] Khong tim thay bat ky cua so MiniFrame nao tren man hinh!")
     
@@ -257,9 +269,10 @@ class DomTrader:
         trader.close_position()     # Click Close (FIFO - cu nhat truoc)
     """
 
-    def __init__(self, symbol, bot_name="[GUI]"):
+    def __init__(self, symbol, bot_name="[GUI]", mt5_pid=None):
         self.symbol = symbol.upper()
         self.bot_name = bot_name
+        self.mt5_pid = mt5_pid
         self.dom_hwnd = None
         self.controls = None
         self._da_khoi_tao = False
@@ -272,9 +285,9 @@ class DomTrader:
         Returns:
             True neu thanh cong, False neu that bai.
         """
-        self.dom_hwnd = tim_dom_window(self.symbol)
+        self.dom_hwnd = tim_dom_window(self.symbol, self.mt5_pid)
         if not self.dom_hwnd:
-            print(f"{self.bot_name} [GUI] Khong tim thay DOM cho {self.symbol}!")
+            print(f"{self.bot_name} [GUI] Khong tim thay DOM cho {self.symbol} (PID={self.mt5_pid})!")
             self._da_khoi_tao = False
             return False
 

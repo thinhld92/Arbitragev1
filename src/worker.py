@@ -150,7 +150,40 @@ else:
 gui_mode = config.get('gui_mode', False)
 dom_trader = None
 if gui_mode:
-    dom_trader = DomTrader(args.symbol, bot_name)
+    # Lấy PID của tiến trình MT5 đang kết nối để tìm đúng DOM của sàn này
+    terminal_info = mt5.terminal_info()
+    mt5_pid = terminal_info.community_connection  # Fallback nếu không có trường PID
+    # MT5 Python API không expose PID trực tiếp, dùng đường dẫn để tìm PID
+    import subprocess
+    try:
+        # Tìm PID của terminal64.exe đang chạy từ đúng thư mục sàn này
+        mt5_dir = os.path.dirname(mt5_path).replace("/", "\\\\")
+        result = subprocess.run(
+            ["wmic", "process", "where", f"ExecutablePath like '%{os.path.basename(mt5_path)}%'", "get", "ProcessId,ExecutablePath", "/format:csv"],
+            capture_output=True, text=True, timeout=5
+        )
+        mt5_pid = None
+        for line in result.stdout.strip().split("\n"):
+            line = line.strip()
+            if not line or line.startswith("Node"):
+                continue
+            # CSV format: Node,ExecutablePath,ProcessId
+            parts = line.split(",")
+            if len(parts) >= 3:
+                exe_path = parts[1].strip()
+                pid_str = parts[2].strip()
+                if os.path.dirname(mt5_path).replace("/", "\\\\").lower() in exe_path.lower():
+                    mt5_pid = int(pid_str)
+                    break
+        if mt5_pid:
+            print(f"🔍 {bot_name} [GUI] Tìm thấy MT5 PID={mt5_pid} tại {mt5_path}")
+        else:
+            print(f"⚠️ {bot_name} [GUI] Không xác định được PID MT5! Sẽ tìm DOM không lọc PID.")
+    except Exception as e:
+        mt5_pid = None
+        print(f"⚠️ {bot_name} [GUI] Lỗi lấy PID: {e}. Sẽ tìm DOM không lọc PID.")
+    
+    dom_trader = DomTrader(args.symbol, bot_name, mt5_pid=mt5_pid)
     dom_trader.khoi_tao()
 
 # ==========================================
