@@ -356,12 +356,18 @@ class DomTrader:
         with _gui_lock:
             # 💡 Thuat toan detect Regional Settings: 
             # Doc thu so Volume dang co san tren man hinh MT5
-            current_vol = _get_edit_text(self.controls["volume"])
-            volume_str = str(volume_str)
+            current_vol = _get_edit_text(self.controls["volume"]).strip()
+            volume_str = str(volume_str).strip()
             
             # Neu Windows dang dung dau phay (,) cho so thap phan
             if "," in current_vol:
                 volume_str = volume_str.replace(".", ",")
+                
+            # 🚀 TOI UU HOA TOC DO HFT:
+            # Neu Volume tren DOM da dung y xì với cấu hình roi -> BO QUA buoc go phim!
+            # Toc do cua thao tac dat volume luc nay se la 0 mili-giay!
+            if current_vol == volume_str:
+                return True
             
             _set_edit_text(self.controls["volume"], volume_str)
 
