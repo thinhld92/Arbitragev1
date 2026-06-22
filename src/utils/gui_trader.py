@@ -236,9 +236,22 @@ def _click_button(hwnd_button):
 def _set_edit_text(hwnd_edit, text):
     """
     Dat noi dung cua 1 Edit control (VD: thay doi volume).
+    Goi them EN_CHANGE de MT5 nhan dien su thay doi trong bo nho.
     """
+    # 1. Ghi de text tren mat hien thi
     buf = ctypes.create_unicode_buffer(text)
     user32.SendMessageW(hwnd_edit, WM_SETTEXT, 0, buf)
+    
+    # 2. Bat buoc MT5 cap nhat vao bo nho (Gia lap su kien Typing)
+    parent_hwnd = user32.GetParent(hwnd_edit)
+    ctrl_id = user32.GetDlgCtrlID(hwnd_edit)
+    
+    WM_COMMAND = 0x0111
+    EN_CHANGE = 0x0300
+    
+    # Tao wParam: HIGH WORD = EN_CHANGE, LOW WORD = control ID
+    wparam = (EN_CHANGE << 16) | (ctrl_id & 0xFFFF)
+    user32.SendMessageW(parent_hwnd, WM_COMMAND, wparam, hwnd_edit)
 
 
 def _get_edit_text(hwnd_edit):
