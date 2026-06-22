@@ -158,21 +158,22 @@ if gui_mode:
     try:
         # Tìm PID của terminal64.exe đang chạy từ đúng thư mục sàn này
         mt5_dir = os.path.dirname(mt5_path).replace("/", "\\\\")
+        ps_cmd = f"Get-CimInstance Win32_Process -Filter \"Name='{os.path.basename(mt5_path)}'\" | Select-Object ProcessId, ExecutablePath | ConvertTo-Csv -NoTypeInformation"
         result = subprocess.run(
-            ["wmic", "process", "where", f"ExecutablePath like '%{os.path.basename(mt5_path)}%'", "get", "ProcessId,ExecutablePath", "/format:csv"],
+            ["powershell", "-NoProfile", "-Command", ps_cmd],
             capture_output=True, text=True, timeout=5
         )
         mt5_pid = None
         for line in result.stdout.strip().split("\n"):
             line = line.strip()
-            if not line or line.startswith("Node"):
+            if not line or "ProcessId" in line:
                 continue
-            # CSV format: Node,ExecutablePath,ProcessId
-            parts = line.split(",")
-            if len(parts) >= 3:
-                exe_path = parts[1].strip()
-                pid_str = parts[2].strip()
-                if os.path.dirname(mt5_path).replace("/", "\\\\").lower() in exe_path.lower():
+            # Dữ liệu CSV từ PowerShell có dạng: "1234","C:\Path\To\terminal64.exe"
+            parts = line.split('","')
+            if len(parts) >= 2:
+                pid_str = parts[0].strip('"')
+                exe_path = parts[1].strip('"')
+                if mt5_dir.lower() in exe_path.lower():
                     mt5_pid = int(pid_str)
                     break
         if mt5_pid:
@@ -409,11 +410,13 @@ def thuc_thi_chi_thi(chi_thi, current_tick):
 
         with mt5_lock:
             # 1. Thu DOM truoc neu duoc bat
+            clicked_dom = False
             if gui_mode and dom_trader and dom_trader.kiem_tra_dom_con_song():
                 print(f"🖱️ {bot_name} Dùng DOM click {action} {volume} LOT...")
                 pos_truoc = mt5.positions_get(symbol=args.symbol)
                 click_ok = dom_trader.thuc_thi_lenh(action, volume)
                 if click_ok:
+                    clicked_dom = True
                     ticket_moi = cho_doi_ticket_moi(pos_truoc, timeout_ms=5000)
                     if ticket_moi:
                         thanh_cong = True
@@ -422,12 +425,13 @@ def thuc_thi_chi_thi(chi_thi, current_tick):
                         comment_loi = "DOM Click OK nhung khong thay ticket xuat hien sau 5s"
                         print(f"❌ {bot_name} LỖI: {comment_loi}")
                 else:
-                    comment_loi = "DOM Click FAIL (Khong click duoc)"
+                    comment_loi = "DOM Click FAIL (Loi Volume hoac Handle bi ngat)"
                     print(f"❌ {bot_name} LỖI: {comment_loi}")
             
             # 2. Fallback API neu DOM that bai
-            if not thanh_cong and ticket_moi is None and (not gui_mode or not dom_trader or not dom_trader.kiem_tra_dom_con_song()):
-                if gui_mode: print(f"⚠️ {bot_name} DOM khong kha dung! Fallback sang API...")
+            # ĐIỀU KIỆN FALLBACK: Chua thanh cong va Chua tung click bừa vao DOM
+            if not thanh_cong and ticket_moi is None and not clicked_dom:
+                if gui_mode: print(f"⚠️ {bot_name} DOM khong kha dung hoac huy Click! Fallback sang API...")
                 result = mt5.order_send(request)
                 if result.retcode == mt5.TRADE_RETCODE_DONE:
                     thanh_cong = True

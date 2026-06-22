@@ -439,13 +439,25 @@ class DomTrader:
             volume: Volume (optional, chi set neu khac volume hien tai)
             
         Returns:
-            True neu click thanh cong.
+            True neu click thanh cong. False neu loi (vi du: set volume that bai).
         """
         if volume is not None:
-            vol_str = str(volume)
-            current_vol = self.lay_volume_hien_tai()
-            if current_vol != vol_str:
+            vol_str = str(volume).strip()
+            current_vol = self.lay_volume_hien_tai().strip()
+            
+            # Tinh toan chuoi ky tu ky vong (co the la 0.19 hoac 0,19 tuy region)
+            vol_str_expected = vol_str.replace(".", ",") if "," in current_vol else vol_str
+            
+            if current_vol != vol_str_expected:
                 self.dat_volume(vol_str)
+                time.sleep(0.02) # Cho MT5 luu bo nho
+                
+                # 🛑 KHOA AN TOAN (SAFETY LOCK): Kiem tra lai volume tren UI lan nua
+                verify_vol = self.lay_volume_hien_tai().strip()
+                if verify_vol != vol_str_expected:
+                    print(f"❌ [CRITICAL] {self.bot_name} Loi dat Volume DOM! (Can: '{vol_str_expected}', Thuc te: '{verify_vol}'). HUY CLICK DOM de chong chay TK!")
+                    return False
+                    
                 _random_delay(1, 3)
 
         action_upper = action.upper()
