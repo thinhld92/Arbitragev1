@@ -115,6 +115,16 @@ def _tach_symbol_tu_title(title):
     return symbol_part
 
 
+def _is_volume_equal(vol1_str, vol2_str):
+    """So sanh 2 chuoi volume bang gia tri float de tranh loi '0.10' != '0.1'."""
+    try:
+        v1 = float(str(vol1_str).replace(",", ".").strip())
+        v2 = float(str(vol2_str).replace(",", ".").strip())
+        return abs(v1 - v2) < 0.0001
+    except ValueError:
+        return False
+
+
 def tim_dom_window(symbol, mt5_pid=None):
     """
     Tim cua so Depth of Market (DOM) dang mo cho symbol chi dinh.
@@ -366,7 +376,7 @@ class DomTrader:
             # 🚀 TOI UU HOA TOC DO HFT:
             # Neu Volume tren DOM da dung y xì với cấu hình roi -> BO QUA buoc go phim!
             # Toc do cua thao tac dat volume luc nay se la 0 mili-giay!
-            if current_vol == volume_str:
+            if _is_volume_equal(current_vol, volume_str):
                 return True
             
             _set_edit_text(self.controls["volume"], volume_str)
@@ -448,13 +458,13 @@ class DomTrader:
             # Tinh toan chuoi ky tu ky vong (co the la 0.19 hoac 0,19 tuy region)
             vol_str_expected = vol_str.replace(".", ",") if "," in current_vol else vol_str
             
-            if current_vol != vol_str_expected:
+            if not _is_volume_equal(current_vol, vol_str_expected):
                 self.dat_volume(vol_str)
                 time.sleep(0.02) # Cho MT5 luu bo nho
                 
                 # 🛑 KHOA AN TOAN (SAFETY LOCK): Kiem tra lai volume tren UI lan nua
                 verify_vol = self.lay_volume_hien_tai().strip()
-                if verify_vol != vol_str_expected:
+                if not _is_volume_equal(verify_vol, vol_str_expected):
                     print(f"❌ [CRITICAL] {self.bot_name} Loi dat Volume DOM! (Can: '{vol_str_expected}', Thuc te: '{verify_vol}'). HUY CLICK DOM de chong chay TK!")
                     return False
                     

@@ -161,7 +161,7 @@ if gui_mode:
         ps_cmd = f"Get-CimInstance Win32_Process -Filter \"Name='{os.path.basename(mt5_path)}'\" | Select-Object ProcessId, ExecutablePath | ConvertTo-Csv -NoTypeInformation"
         result = subprocess.run(
             ["powershell", "-NoProfile", "-Command", ps_cmd],
-            capture_output=True, text=True, timeout=5
+            capture_output=True, text=True, timeout=15
         )
         mt5_pid = None
         for line in result.stdout.strip().split("\n"):
