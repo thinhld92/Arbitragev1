@@ -235,23 +235,22 @@ def _click_button(hwnd_button):
 
 def _set_edit_text(hwnd_edit, text):
     """
-    Dat noi dung cua 1 Edit control (VD: thay doi volume).
-    Goi them EN_CHANGE de MT5 nhan dien su thay doi trong bo nho.
+    Ghi text vao Edit control bang cach GIA LAP GO PHIM tung ky tu (WM_CHAR).
+    Cach nay la bullet-proof nhat doi voi cac phan mem li lom nhu MT5.
     """
-    # 1. Ghi de text tren mat hien thi
-    buf = ctypes.create_unicode_buffer(text)
-    user32.SendMessageW(hwnd_edit, WM_SETTEXT, 0, buf)
+    # 1. Chon toan bo text hien co (EM_SETSEL)
+    EM_SETSEL = 0x00B1
+    user32.SendMessageW(hwnd_edit, EM_SETSEL, 0, -1)
     
-    # 2. Bat buoc MT5 cap nhat vao bo nho (Gia lap su kien Typing)
-    parent_hwnd = user32.GetParent(hwnd_edit)
-    ctrl_id = user32.GetDlgCtrlID(hwnd_edit)
+    # 2. Bam nut Backspace de xoa (WM_CHAR + VK_BACK)
+    WM_CHAR = 0x0102
+    VK_BACK = 0x08
+    user32.SendMessageW(hwnd_edit, WM_CHAR, VK_BACK, 0)
     
-    WM_COMMAND = 0x0111
-    EN_CHANGE = 0x0300
-    
-    # Tao wParam: HIGH WORD = EN_CHANGE, LOW WORD = control ID
-    wparam = (EN_CHANGE << 16) | (ctrl_id & 0xFFFF)
-    user32.SendMessageW(parent_hwnd, WM_COMMAND, wparam, hwnd_edit)
+    # 3. Go tung ky tu vao o
+    for char in text:
+        user32.SendMessageW(hwnd_edit, WM_CHAR, ord(char), 0)
+        time.sleep(0.005) # Delay sieu nho cho MT5 kip nhan ky tu
 
 
 def _get_edit_text(hwnd_edit):
@@ -355,7 +354,16 @@ class DomTrader:
             return False
 
         with _gui_lock:
-            _set_edit_text(self.controls["volume"], str(volume_str))
+            # 💡 Thuat toan detect Regional Settings: 
+            # Doc thu so Volume dang co san tren man hinh MT5
+            current_vol = _get_edit_text(self.controls["volume"])
+            volume_str = str(volume_str)
+            
+            # Neu Windows dang dung dau phay (,) cho so thap phan
+            if "," in current_vol:
+                volume_str = volume_str.replace(".", ",")
+            
+            _set_edit_text(self.controls["volume"], volume_str)
 
         return True
 
