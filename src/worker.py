@@ -25,6 +25,8 @@ if args.role == "BASE":
     dan_tran_cua_so(2)
 elif args.role == "DIFF":
     dan_tran_cua_so(3)
+elif args.role in ("COPY_DIFF", "COPY_BASE"):
+    dan_tran_cua_so(4)
 
 # ==========================================
 # 2. ĐỌC FILE CONFIG ĐỂ TÌM ĐƯỜNG DẪN
@@ -41,6 +43,11 @@ try:
         cap for cap in config['danh_sach_cap']
         if (cap['base_exchange'].upper(), cap['base_symbol'].upper()) == worker_key
         or (cap['diff_exchange'].upper(), cap['diff_symbol'].upper()) == worker_key
+        or (
+            str(cap.get('trade_mode', '')).strip().lower() in ('copy_diff', 'copy_base')
+            and (str((cap.get('execution') or {}).get('exchange', '')).strip().upper(),
+                 str((cap.get('execution') or {}).get('symbol', '')).strip().upper()) == worker_key
+        )
     ]
     cap_cfg = matching_caps[0] if matching_caps else None
 

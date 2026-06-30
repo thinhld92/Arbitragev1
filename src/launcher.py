@@ -65,6 +65,17 @@ for cap in danh_sach_cap:
     elif dict_workers[d_key] == "BASE":
         dict_workers[d_key] = "BASE/DIFF"
 
+    # Gắn mác cho sàn thứ 3 (copy_diff, copy_base)
+    trade_mode = str(cap.get('trade_mode', 'hedge')).strip().lower()
+    if trade_mode in ('copy_diff', 'copy_base'):
+        execution = cap.get('execution') or {}
+        exec_exchange = str(execution.get('exchange', '')).strip().upper()
+        exec_symbol = str(execution.get('symbol', '')).strip().upper()
+        if exec_exchange and exec_symbol:
+            e_key = (exec_exchange, exec_symbol)
+            if e_key not in dict_workers:
+                dict_workers[e_key] = "COPY_DIFF" if trade_mode == 'copy_diff' else "COPY_BASE"
+
 print("\n👷‍♂️ ĐANG BỐ TRÍ CÁC TRINH SÁT (WORKER)...")
 for (broker, symbol), role in dict_workers.items():
     print(f"   👉 Đang gọi {role} Worker: {broker} - {symbol}")
@@ -81,10 +92,17 @@ print("\n🧠 ĐANG ĐÁNH THỨC TƯỚNG QUÂN (MASTER)...")
 for cap in danh_sach_cap:
     pair_id = cap['id']
     trade_mode = str(cap.get('trade_mode', 'hedge')).strip().lower()
-    if trade_mode not in ('hedge', 'single'):
+    if trade_mode not in ('hedge', 'single', 'copy_diff', 'copy_base'):
         print(f"❌ trade_mode không hợp lệ cho {pair_id}: {trade_mode}")
         quit()
-    master_script = 'src/master_single.py' if trade_mode == 'single' else 'src/mastery.py'
+    if trade_mode == 'single':
+        master_script = 'src/master_single.py'
+    elif trade_mode == 'copy_diff':
+        master_script = 'src/master_copy_diff.py'
+    elif trade_mode == 'copy_base':
+        master_script = 'src/master_copy_base.py'
+    else:
+        master_script = 'src/mastery.py'
     print(f"   👉 Đang gọi Master cho cặp: {pair_id} | mode={trade_mode} | script={master_script}")
     subprocess.Popen(
         ['cmd', '/k', 'python', master_script, '--pair_id', pair_id], 

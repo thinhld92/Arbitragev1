@@ -202,7 +202,7 @@ while True:
             pending_receipts[pair_token][role] = bien_lai
             
             # KHI NHẬN ĐƯỢC BIÊN LAI, KIỂM TRA XEM CÓ PHẢI LÀ ÁN TRẢM ĐƠN KHÔNG
-            is_single = ctx.get("is_single_cut", False) or ctx.get("trade_mode") == "single"
+            is_single = ctx.get("is_single_cut", False) or ctx.get("trade_mode") in ("single", "copy_diff", "copy_base")
 
             if is_single or ("BASE" in pending_receipts[pair_token] and "DIFF" in pending_receipts[pair_token]):
                 vps_name = config.get("vps_name", "trade_data")
@@ -225,16 +225,23 @@ while True:
                     # TÍNH TOÁN LỜI LỖ CHO GIAO DỊCH HIỆN TẠI
                     if is_single:
                         single_data = pending_receipts[pair_token][role]
-                        b_ticket = single_data['ticket'] if role == "BASE" else "N/A"
-                        d_ticket = single_data['ticket'] if role == "DIFF" else "N/A"
-                        b_prof = single_data['profit'] if role == "BASE" else 0.0
-                        d_prof = single_data['profit'] if role == "DIFF" else 0.0
-                        b_fee = single_data['fee'] if role == "BASE" else 0.0
-                        d_fee = single_data['fee'] if role == "DIFF" else 0.0
-                        b_op = single_data['open_price'] if role == "BASE" else 0.0
-                        b_cp = single_data['close_price'] if role == "BASE" else 0.0
-                        d_op = single_data['open_price'] if role == "DIFF" else 0.0
-                        d_cp = single_data['close_price'] if role == "DIFF" else 0.0
+                        is_base_role = (role in ("BASE", "COPY_BASE"))
+                        
+                        b_ticket = single_data['ticket'] if is_base_role else "N/A"
+                        d_ticket = single_data['ticket'] if not is_base_role else "N/A"
+                        
+                        b_prof = single_data['profit'] if is_base_role else 0.0
+                        d_prof = single_data['profit'] if not is_base_role else 0.0
+                        
+                        b_fee = single_data['fee'] if is_base_role else 0.0
+                        d_fee = single_data['fee'] if not is_base_role else 0.0
+                        
+                        b_op = single_data['open_price'] if is_base_role else 0.0
+                        b_cp = single_data['close_price'] if is_base_role else 0.0
+                        
+                        d_op = single_data['open_price'] if not is_base_role else 0.0
+                        d_cp = single_data['close_price'] if not is_base_role else 0.0
+                        
                         vol = single_data['volume']
                         net_profit = b_prof + d_prof + b_fee + d_fee
                         total_fee = b_fee + d_fee
@@ -312,10 +319,10 @@ while True:
                             ctx.get("trade_mode", "hedge"),
                             ctx.get("execution_exchange", ""),
                             ctx.get("execution_symbol", ""),
-                            ctx.get("execution_role", role if ctx.get("trade_mode") == "single" else ""),
+                            ctx.get("execution_role", role if ctx.get("trade_mode") in ("single", "copy_diff", "copy_base") else ""),
                             ctx.get(
                                 "execution_ticket",
-                                (b_ticket if role == "BASE" else d_ticket) if ctx.get("trade_mode") == "single" else ""
+                                (b_ticket if role in ("BASE", "COPY_BASE") else d_ticket) if ctx.get("trade_mode") in ("single", "copy_diff", "copy_base") else ""
                             ),
                             ctx.get("execution_side", "")
                         ])
