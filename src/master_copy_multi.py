@@ -726,7 +726,9 @@ try:
                     st["thoi_diem_vao_lenh_cuoi"] = now_sec # Block spam
                     
                     # Tao context
+                    id_lenh = f"O_{str(uuid.uuid4()).split('-')[0].upper()}"
                     order_data = {
+                        "id_lenh": id_lenh,
                         "action": target_action,
                         "chenh_lech_vao": tin_hieu["chenh_lech"],
                         "chenh_lech_vao_raw": tin_hieu["chenh_lech_raw"],
