@@ -594,14 +594,14 @@ try:
             ask_diff = tick_diff["ask"]
             bid_diff = tick_diff["bid"]
             
-            # Tinh toan tin hieu arbitrage
-            tin_hieu = check_tin_hieu_arbitrage(
-                ask_base, bid_base, ask_diff, bid_diff,
-                dev_entry, dev_close, spread_pivot,
-                stable_time_sec,
-                max_tick_hz_base, tick_base.get("tick_hz", 0),
-                max_tick_hz_diff, tick_diff.get("tick_hz", 0)
-            )
+            # Tinh toan tin hieu arbitrage (Dung de mo lenh)
+            tin_hieu = check_tin_hieu_arbitrage(tick_base, tick_diff, cap_hien_tai, None)
+            
+            # Tinh san cac chenh lech de dong lenh (Dong lenh tinh rieng cho tung execution)
+            chenh_th1_raw = bid_base - ask_diff
+            chenh_th2_raw = bid_diff - ask_base
+            chenh_th1 = chenh_th1_raw - spread_pivot
+            chenh_th2 = chenh_th2_raw + spread_pivot
             
             # QUAN TRONG NHAST: LOOP QUA TAT CA CAC SAN COPY DE XU LY
             for ex in executions:
@@ -621,9 +621,13 @@ try:
                         continue
                     
                     huong = st["huong_dang_danh"]
-                    # Xac dinh thoi diem dong dua vao huong
-                    tin_hieu_dong = tin_hieu.get("dong_th1") if huong == "TH1" else tin_hieu.get("dong_th2")
-                    dong_ly_thuyet = tin_hieu_dong and tin_hieu_dong.get("thoa_man")
+                    dong_ly_thuyet = False
+                    if huong == "TH1" and chenh_th2 >= dev_close:
+                        dong_ly_thuyet = True
+                        tin_hieu_dong = {"chenh_lech": chenh_th2, "chenh_lech_raw": chenh_th2_raw, "spread_pivot": spread_pivot, "loai_dong": "TH1"}
+                    elif huong == "TH2" and chenh_th1 >= dev_close:
+                        dong_ly_thuyet = True
+                        tin_hieu_dong = {"chenh_lech": chenh_th1, "chenh_lech_raw": chenh_th1_raw, "spread_pivot": spread_pivot, "loai_dong": "TH2"}
                     
                     for order_data in st["lich_su_lenh"]:
                         if dong_ly_thuyet:
@@ -682,7 +686,8 @@ try:
                                 continue
                                 
                 # --- XU LY VAO LENH (OPEN) ---
-                if tin_hieu["co_tin_hieu"] and len(st["lich_su_lenh"]) < max_orders:
+                co_tin_hieu = tin_hieu.get("hanh_dong") == "VAO_LENH"
+                if co_tin_hieu and len(st["lich_su_lenh"]) < max_orders:
                     if now_sec - st["thoi_diem_vao_lenh_cuoi"] < cooldown_sec:
                         continue
                     if now_sec - st["thoi_diem_vua_ra_lenh_dong"] < cooldown_close_sec:
