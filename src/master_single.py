@@ -56,12 +56,12 @@ def resolve_execution(cap):
 
     execution = cap.get("execution") or {}
     exec_exchange = safe_upper(execution.get("exchange"))
-    exec_symbol = safe_upper(execution.get("symbol"))
+    exec_symbol = str(execution.get("symbol")).strip()
     if not exec_exchange or not exec_symbol:
         raise ValueError("trade_mode='single' bat buoc co execution.exchange va execution.symbol")
 
-    base_key = (safe_upper(cap.get("base_exchange")), safe_upper(cap.get("base_symbol")))
-    diff_key = (safe_upper(cap.get("diff_exchange")), safe_upper(cap.get("diff_symbol")))
+    base_key = (safe_upper(cap.get("base_exchange")), str(cap.get("base_symbol")).strip())
+    diff_key = (safe_upper(cap.get("diff_exchange")), str(cap.get("diff_symbol")).strip())
     exec_key = (exec_exchange, exec_symbol)
 
     if exec_key == base_key:
@@ -254,8 +254,8 @@ r = redis.Redis(
     socket_connect_timeout=2.0,
 )
 
-key_base = f"TICK:{safe_upper(cap_hien_tai['base_exchange'])}:{safe_upper(cap_hien_tai['base_symbol'])}"
-key_diff = f"TICK:{safe_upper(cap_hien_tai['diff_exchange'])}:{safe_upper(cap_hien_tai['diff_symbol'])}"
+key_base = f"TICK:{safe_upper(cap_hien_tai['base_exchange'])}:{cap_hien_tai['base_symbol']}"
+key_diff = f"TICK:{safe_upper(cap_hien_tai['diff_exchange'])}:{cap_hien_tai['diff_symbol']}"
 key_state = f"STATE:SINGLE_MASTER:{args.pair_id}"
 QUEUE_ORDER_RESULT = f"QUEUE:ORDER_RESULT:{args.pair_id}"
 QUEUE_TELEGRAM = "TELEGRAM_QUEUE"

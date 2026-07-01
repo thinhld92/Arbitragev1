@@ -70,7 +70,7 @@ for cap in danh_sach_cap:
     if trade_mode in ('copy_diff', 'copy_base'):
         execution = cap.get('execution') or {}
         exec_exchange = str(execution.get('exchange', '')).strip().upper()
-        exec_symbol = str(execution.get('symbol', '')).strip().upper()
+        exec_symbol = str(execution.get('symbol', '')).strip()
         if exec_exchange and exec_symbol:
             e_key = (exec_exchange, exec_symbol)
             if e_key not in dict_workers:
@@ -79,7 +79,7 @@ for cap in danh_sach_cap:
         executions = cap.get('executions') or []
         for ex in executions:
             exec_exchange = str(ex.get('exchange', '')).strip().upper()
-            exec_symbol = str(ex.get('symbol', '')).strip().upper()
+            exec_symbol = str(ex.get('symbol', '')).strip()
             if exec_exchange and exec_symbol:
                 e_key = (exec_exchange, exec_symbol)
                 copy_side = str(ex.get('copy_side', 'diff')).strip().upper()

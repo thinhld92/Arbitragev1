@@ -58,7 +58,7 @@ def resolve_execution(cap):
 
     execution = cap.get("execution") or {}
     exec_exchange = safe_upper(execution.get("exchange"))
-    exec_symbol = safe_upper(execution.get("symbol"))
+    exec_symbol = str(execution.get("symbol")).strip()
     if not exec_exchange or not exec_symbol:
         raise ValueError("trade_mode='copy_base' bat buoc co execution.exchange va execution.symbol")
 
@@ -241,8 +241,8 @@ r = redis.Redis(
     socket_connect_timeout=2.0,
 )
 
-key_base = f"TICK:{safe_upper(cap_hien_tai['base_exchange'])}:{safe_upper(cap_hien_tai['base_symbol'])}"
-key_diff = f"TICK:{safe_upper(cap_hien_tai['diff_exchange'])}:{safe_upper(cap_hien_tai['diff_symbol'])}"
+key_base = f"TICK:{safe_upper(cap_hien_tai['base_exchange'])}:{cap_hien_tai['base_symbol']}"
+key_diff = f"TICK:{safe_upper(cap_hien_tai['diff_exchange'])}:{cap_hien_tai['diff_symbol']}"
 # 🆕 Subscribe tick cua san thu 3 (Execution) de kiem tra mang va gia
 key_exec = f"TICK:{execution['exchange']}:{execution['symbol']}"
 key_state = f"STATE:COPY_BASE_MASTER:{args.pair_id}"

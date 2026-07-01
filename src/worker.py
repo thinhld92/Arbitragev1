@@ -38,23 +38,23 @@ try:
     mt5_path = config['brokers'][args.broker]['path']
     redis_conf = config['redis']
     
-    worker_key = (args.broker.upper(), args.symbol.upper())
+    worker_key = (args.broker.upper(), args.symbol)
     matching_caps = []
     for cap in config['danh_sach_cap']:
-        if (cap['base_exchange'].upper(), cap['base_symbol'].upper()) == worker_key:
+        if (cap['base_exchange'].upper(), cap['base_symbol']) == worker_key:
             matching_caps.append(cap)
-        elif (cap['diff_exchange'].upper(), cap['diff_symbol'].upper()) == worker_key:
+        elif (cap['diff_exchange'].upper(), cap['diff_symbol']) == worker_key:
             matching_caps.append(cap)
         else:
             trade_mode = str(cap.get('trade_mode', '')).strip().lower()
             if trade_mode in ('copy_diff', 'copy_base'):
                 execution = cap.get('execution') or {}
-                exec_key = (str(execution.get('exchange', '')).strip().upper(), str(execution.get('symbol', '')).strip().upper())
+                exec_key = (str(execution.get('exchange', '')).strip().upper(), str(execution.get('symbol', '')).strip())
                 if exec_key == worker_key:
                     matching_caps.append(cap)
             elif trade_mode == 'copy_multi':
                 for ex in cap.get('executions', []):
-                    exec_key = (str(ex.get('exchange', '')).strip().upper(), str(ex.get('symbol', '')).strip().upper())
+                    exec_key = (str(ex.get('exchange', '')).strip().upper(), str(ex.get('symbol', '')).strip())
                     if exec_key == worker_key:
                         matching_caps.append(cap)
                         break
@@ -68,14 +68,14 @@ try:
             execution = cap.get('execution') or {}
             execution_key = (
                 str(execution.get('exchange', '')).strip().upper(),
-                str(execution.get('symbol', '')).strip().upper()
+                str(execution.get('symbol', '')).strip()
             )
             if execution_key != worker_key:
                 continue
         elif trade_mode == 'copy_multi':
             is_execution = False
             for ex in cap.get('executions', []):
-                if (str(ex.get('exchange', '')).strip().upper(), str(ex.get('symbol', '')).strip().upper()) == worker_key:
+                if (str(ex.get('exchange', '')).strip().upper(), str(ex.get('symbol', '')).strip()) == worker_key:
                     is_execution = True
                     break
             if not is_execution:
@@ -102,8 +102,8 @@ except redis.ConnectionError:
     print(f"❌ Không kết nối được Redis tại {redis_conf['host']}:{redis_conf['port']}! Hãy kiểm tra Redis server.")
     quit()
 
-REDIS_TICK_KEY = f"TICK:{args.broker.upper()}:{args.symbol.upper()}"
-REDIS_POS_KEY = f"POSITION:{args.broker.upper()}:{args.symbol.upper()}"
+REDIS_TICK_KEY = f"TICK:{args.broker.upper()}:{args.symbol}"
+REDIS_POS_KEY = f"POSITION:{args.broker.upper()}:{args.symbol}"
 REDIS_EQUITY_KEY = f"ACCOUNT:{args.broker.upper()}:EQUITY"
 QUEUE_ORDER_KEY = f"QUEUE:ORDER:{args.broker.upper()}"
 QUEUE_TELEGRAM = "TELEGRAM_QUEUE"
@@ -167,7 +167,7 @@ for cap in matching_caps:
             break
     elif t_mode == 'copy_multi':
         for ex in cap.get('executions', []):
-            if (str(ex.get('exchange', '')).strip().upper(), str(ex.get('symbol', '')).strip().upper()) == worker_key:
+            if (str(ex.get('exchange', '')).strip().upper(), str(ex.get('symbol', '')).strip()) == worker_key:
                 need_dom = True
                 break
         if need_dom: break

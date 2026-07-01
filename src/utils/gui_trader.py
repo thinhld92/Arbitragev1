@@ -137,7 +137,7 @@ def tim_dom_window(symbol, mt5_pid=None):
     Returns:
         HWND cua DOM window, hoac None neu khong tim thay.
     """
-    symbol_upper = symbol.upper()
+    symbol_upper = symbol
     result = []
     all_miniframes = []  # Luu tat ca MiniFrame de debug
 
@@ -292,7 +292,7 @@ class DomTrader:
     """
 
     def __init__(self, symbol, bot_name="[GUI]", mt5_pid=None):
-        self.symbol = symbol.upper()
+        self.symbol = symbol
         self.bot_name = bot_name
         self.mt5_pid = mt5_pid
         self.dom_hwnd = None

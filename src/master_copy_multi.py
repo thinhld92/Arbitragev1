@@ -58,7 +58,7 @@ def resolve_executions(cap):
     parsed = []
     for exec_cfg in executions:
         exec_exchange = safe_upper(exec_cfg.get("exchange"))
-        exec_symbol = safe_upper(exec_cfg.get("symbol"))
+        exec_symbol = str(exec_cfg.get("symbol")).strip()
         copy_side = safe_upper(exec_cfg.get("copy_side", "DIFF"))
         if not exec_exchange or not exec_symbol:
             continue
@@ -244,8 +244,8 @@ r = redis.Redis(
     socket_connect_timeout=2.0,
 )
 
-key_base = f"TICK:{safe_upper(cap_hien_tai['base_exchange'])}:{safe_upper(cap_hien_tai['base_symbol'])}"
-key_diff = f"TICK:{safe_upper(cap_hien_tai['diff_exchange'])}:{safe_upper(cap_hien_tai['diff_symbol'])}"
+key_base = f"TICK:{safe_upper(cap_hien_tai['base_exchange'])}:{cap_hien_tai['base_symbol']}"
+key_diff = f"TICK:{safe_upper(cap_hien_tai['diff_exchange'])}:{cap_hien_tai['diff_symbol']}"
 # 🆕 Subscribe tick cua san thu 3 (Execution) de kiem tra mang va gia
 # key_exec removed
 key_state = f"STATE:COPY_MULTI_MASTER:{args.pair_id}"
