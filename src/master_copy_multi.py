@@ -730,7 +730,7 @@ try:
                         "action": target_action,
                         "chenh_lech_vao": tin_hieu["chenh_lech"],
                         "chenh_lech_vao_raw": tin_hieu["chenh_lech_raw"],
-                        "tinh_chat_vao": tin_hieu["mode"],
+                        "tinh_chat_vao": tin_hieu.get("mode", "N/A"),
                         "entry_spread_pivot": tin_hieu["spread_pivot"],
                         "conf_dev_entry": dev_entry,
                         "entry_stable_time": stable_time_sec,
