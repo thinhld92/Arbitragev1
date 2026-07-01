@@ -151,29 +151,9 @@ else:
 
 print(f"✅ {bot_name} Kết nối thành công! Cấu hình Filling Mode: {ten_filling}")
 
-# -----------------------------------------------------
-# 🛡️ KIỂM TRA QUYỀN GIAO DỊCH TÀI KHOẢN (Check 1 lần)
-# -----------------------------------------------------
-acc_info = mt5.account_info()
-if acc_info is not None:
-    if not acc_info.trade_allowed:
-        print(f"❌ {bot_name} LỖI: Tài khoản không được phép trade (Đang dùng Pass View?)")
-        mt5.shutdown()
-        quit()
-    if not acc_info.trade_expert:
-        print(f"❌ {bot_name} LỖI: Sàn chặn không cho phép dùng Bot (Algo Trading) trên tài khoản này!")
-        mt5.shutdown()
-        quit()
-else:
-    print(f"❌ {bot_name} Không lấy được thông tin tài khoản. Vui lòng kiểm tra lại đăng nhập!")
-    mt5.shutdown()
-    quit()
-
-# ==========================================
-# KHỞI TẠO DOM TRADER (NẾU GUI_MODE BẬT)
-# ==========================================
 gui_mode = config.get('gui_mode', False)
 dom_trader = None
+
 need_dom = False
 for cap in matching_caps:
     t_mode = str(cap.get('trade_mode', 'hedge')).strip().lower()
@@ -191,6 +171,25 @@ for cap in matching_caps:
                 need_dom = True
                 break
         if need_dom: break
+
+# -----------------------------------------------------
+# 🛡️ KIỂM TRA QUYỀN GIAO DỊCH TÀI KHOẢN (Check 1 lần)
+# -----------------------------------------------------
+if need_dom:
+    acc_info = mt5.account_info()
+    if acc_info is not None:
+        if not acc_info.trade_allowed:
+            print(f"❌ {bot_name} LỖI: Tài khoản không được phép trade (Đang dùng Pass View?)")
+            mt5.shutdown()
+            quit()
+        if not acc_info.trade_expert:
+            print(f"❌ {bot_name} LỖI: Sàn chặn không cho phép dùng Bot (Algo Trading) trên tài khoản này!")
+            mt5.shutdown()
+            quit()
+    else:
+        print(f"❌ {bot_name} Không lấy được thông tin tài khoản. Vui lòng kiểm tra lại đăng nhập!")
+        mt5.shutdown()
+        quit()
 
 if gui_mode and need_dom:
     # Lấy PID của tiến trình MT5 đang kết nối để tìm đúng DOM của sàn này

@@ -430,10 +430,11 @@ thoi_diem_spam_cuoi = 0
 startup_time = time.time()
 STARTUP_GRACE_SECOND = cap_hien_tai.get("startup_grace_second", 15)
 
-print(
-    f"[COPY_MULTI] Master san sang: execution={execution['exchange']}:{execution['symbol']} "
-    f"role={execution['role']} volume={execution['volume']}"
-)
+for ex in executions:
+    print(
+        f"[COPY_MULTI] Master san sang: execution={ex['exchange']}:{ex['symbol']} "
+        f"role={ex['role']} volume={ex['volume']}"
+    )
 logging.info("=== START MASTER COPY_MULTI %s ===", args.pair_id)
 refresh_runtime_spread_pivot("startup", force_log=True)
 
