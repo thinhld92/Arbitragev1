@@ -39,16 +39,26 @@ try:
     redis_conf = config['redis']
     
     worker_key = (args.broker.upper(), args.symbol.upper())
-    matching_caps = [
-        cap for cap in config['danh_sach_cap']
-        if (cap['base_exchange'].upper(), cap['base_symbol'].upper()) == worker_key
-        or (cap['diff_exchange'].upper(), cap['diff_symbol'].upper()) == worker_key
-        or (
-            str(cap.get('trade_mode', '')).strip().lower() in ('copy_diff', 'copy_base')
-            and (str((cap.get('execution') or {}).get('exchange', '')).strip().upper(),
-                 str((cap.get('execution') or {}).get('symbol', '')).strip().upper()) == worker_key
-        )
-    ]
+    matching_caps = []
+    for cap in config['danh_sach_cap']:
+        if (cap['base_exchange'].upper(), cap['base_symbol'].upper()) == worker_key:
+            matching_caps.append(cap)
+        elif (cap['diff_exchange'].upper(), cap['diff_symbol'].upper()) == worker_key:
+            matching_caps.append(cap)
+        else:
+            trade_mode = str(cap.get('trade_mode', '')).strip().lower()
+            if trade_mode in ('copy_diff', 'copy_base'):
+                execution = cap.get('execution') or {}
+                exec_key = (str(execution.get('exchange', '')).strip().upper(), str(execution.get('symbol', '')).strip().upper())
+                if exec_key == worker_key:
+                    matching_caps.append(cap)
+            elif trade_mode == 'copy_multi':
+                for ex in cap.get('executions', []):
+                    exec_key = (str(ex.get('exchange', '')).strip().upper(), str(ex.get('symbol', '')).strip().upper())
+                    if exec_key == worker_key:
+                        matching_caps.append(cap)
+                        break
+    
     cap_cfg = matching_caps[0] if matching_caps else None
 
     alert_equity_candidates = []
@@ -61,6 +71,14 @@ try:
                 str(execution.get('symbol', '')).strip().upper()
             )
             if execution_key != worker_key:
+                continue
+        elif trade_mode == 'copy_multi':
+            is_execution = False
+            for ex in cap.get('executions', []):
+                if (str(ex.get('exchange', '')).strip().upper(), str(ex.get('symbol', '')).strip().upper()) == worker_key:
+                    is_execution = True
+                    break
+            if not is_execution:
                 continue
         alert_equity_candidates.append(cap.get('alert_equity', 0))
 

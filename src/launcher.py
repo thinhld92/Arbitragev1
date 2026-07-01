@@ -65,7 +65,7 @@ for cap in danh_sach_cap:
     elif dict_workers[d_key] == "BASE":
         dict_workers[d_key] = "BASE/DIFF"
 
-    # Gắn mác cho sàn thứ 3 (copy_diff, copy_base)
+    # Gắn mác cho sàn thứ 3 (copy_diff, copy_base, copy_multi)
     trade_mode = str(cap.get('trade_mode', 'hedge')).strip().lower()
     if trade_mode in ('copy_diff', 'copy_base'):
         execution = cap.get('execution') or {}
@@ -75,6 +75,17 @@ for cap in danh_sach_cap:
             e_key = (exec_exchange, exec_symbol)
             if e_key not in dict_workers:
                 dict_workers[e_key] = "COPY_DIFF" if trade_mode == 'copy_diff' else "COPY_BASE"
+    elif trade_mode == 'copy_multi':
+        executions = cap.get('executions') or []
+        for ex in executions:
+            exec_exchange = str(ex.get('exchange', '')).strip().upper()
+            exec_symbol = str(ex.get('symbol', '')).strip().upper()
+            if exec_exchange and exec_symbol:
+                e_key = (exec_exchange, exec_symbol)
+                copy_side = str(ex.get('copy_side', 'diff')).strip().upper()
+                role_str = "COPY_DIFF" if copy_side == "DIFF" else "COPY_BASE"
+                if e_key not in dict_workers:
+                    dict_workers[e_key] = role_str
 
 print("\n👷‍♂️ ĐANG BỐ TRÍ CÁC TRINH SÁT (WORKER)...")
 for (broker, symbol), role in dict_workers.items():
@@ -92,7 +103,7 @@ print("\n🧠 ĐANG ĐÁNH THỨC TƯỚNG QUÂN (MASTER)...")
 for cap in danh_sach_cap:
     pair_id = cap['id']
     trade_mode = str(cap.get('trade_mode', 'hedge')).strip().lower()
-    if trade_mode not in ('hedge', 'single', 'copy_diff', 'copy_base'):
+    if trade_mode not in ('hedge', 'single', 'copy_diff', 'copy_base', 'copy_multi'):
         print(f"❌ trade_mode không hợp lệ cho {pair_id}: {trade_mode}")
         quit()
     if trade_mode == 'single':
@@ -101,6 +112,8 @@ for cap in danh_sach_cap:
         master_script = 'src/master_copy_diff.py'
     elif trade_mode == 'copy_base':
         master_script = 'src/master_copy_base.py'
+    elif trade_mode == 'copy_multi':
+        master_script = 'src/master_copy_multi.py'
     else:
         master_script = 'src/mastery.py'
     print(f"   👉 Đang gọi Master cho cặp: {pair_id} | mode={trade_mode} | script={master_script}")
@@ -113,16 +126,10 @@ for cap in danh_sach_cap:
 # ==========================================
 # 3. BẬT TERMINAL KẾ TOÁN TRƯỞNG (ACCOUNTANT)
 # ==========================================
-print("\n🧠 ĐANG ĐÁNH THỨC KẾ TOÁN TRƯỞNG (ACCOUNTANT)...")
-for cap in danh_sach_cap:
-    pair_id = cap['id']
-    print(f"   👉 Đang gọi Accountant cho cặp: {pair_id} (Hiển thị cột phải)")
-    
-    # 👉 Tuyệt chiêu: Truyền nguyên 1 chuỗi string và bật shell=True
-    command = f'start "KETOAN_{pair_id}" cmd /k python src/accountant.py --pair_id {pair_id}'
-    subprocess.Popen(command, shell=True)
-    
-    time.sleep(2)
+print("\n🧠 ĐANG ĐÁNH THỨC KẾ TOÁN TRƯỞNG (ACCOUNTANT CHUNG TỔNG HỢP)...")
+command = 'start "KETOAN_TONG" cmd /k python src/accountant.py'
+subprocess.Popen(command, shell=True)
+time.sleep(2)
 
 print("\n✅ QUẢN ĐỐC ĐÃ BỐ TRÍ XONG TOÀN BỘ NHÂN SỰ!")
 print("👀 Hãy theo dõi các cửa sổ Terminal để xem hệ thống hoạt động.")

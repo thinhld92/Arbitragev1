@@ -202,7 +202,7 @@ while True:
             pending_receipts[pair_token][role] = bien_lai
             
             # KHI NHẬN ĐƯỢC BIÊN LAI, KIỂM TRA XEM CÓ PHẢI LÀ ÁN TRẢM ĐƠN KHÔNG
-            is_single = ctx.get("is_single_cut", False) or ctx.get("trade_mode") in ("single", "copy_diff", "copy_base")
+            is_single = ctx.get("is_single_cut", False) or ctx.get("trade_mode") in ("single", "copy_diff", "copy_base", "copy_multi")
 
             if is_single or ("BASE" in pending_receipts[pair_token] and "DIFF" in pending_receipts[pair_token]):
                 vps_name = config.get("vps_name", "trade_data")
@@ -218,7 +218,9 @@ while True:
                     print(SEPARATOR_LINE)
                     print_counter = 0
 
-                csv_file = os.path.join(history_dir, f"{vps_name}_{ctx['pair_id']}_{today_str}.csv")
+                exec_exchange = ctx.get('execution_exchange', '')
+                pair_id_file = f"{ctx['pair_id']}_{exec_exchange}" if exec_exchange else ctx['pair_id']
+                csv_file = os.path.join(history_dir, f"{vps_name}_{pair_id_file}_{today_str}.csv")
                 file_exists = os.path.isfile(csv_file)
                 
                 try:
@@ -319,10 +321,10 @@ while True:
                             ctx.get("trade_mode", "hedge"),
                             ctx.get("execution_exchange", ""),
                             ctx.get("execution_symbol", ""),
-                            ctx.get("execution_role", role if ctx.get("trade_mode") in ("single", "copy_diff", "copy_base") else ""),
+                            ctx.get("execution_role", role if ctx.get("trade_mode") in ("single", "copy_diff", "copy_base", "copy_multi") else ""),
                             ctx.get(
                                 "execution_ticket",
-                                (b_ticket if role in ("BASE", "COPY_BASE") else d_ticket) if ctx.get("trade_mode") in ("single", "copy_diff", "copy_base") else ""
+                                (b_ticket if role in ("BASE", "COPY_BASE") else d_ticket) if ctx.get("trade_mode") in ("single", "copy_diff", "copy_base", "copy_multi") else ""
                             ),
                             ctx.get("execution_side", "")
                         ])
