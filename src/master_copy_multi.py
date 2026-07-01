@@ -49,31 +49,34 @@ def normalize_mode(cap):
     return mode
 
 
-def resolve_execution(cap):
-    """
-    Phan giai block execution cho copy_diff.
-    Khac voi single: san execution KHONG CAN trung base/diff, va role luon la COPY_MULTI.
-    """
+def resolve_executions(cap):
     mode = normalize_mode(cap)
-
-    execution = cap.get("execution") or {}
-    exec_exchange = safe_upper(execution.get("exchange"))
-    exec_symbol = safe_upper(execution.get("symbol"))
-    if not exec_exchange or not exec_symbol:
-        raise ValueError("trade_mode='copy_diff' bat buoc co execution.exchange va execution.symbol")
-
-    # copy_diff: role luon la COPY_MULTI, logic vao lenh theo chieu cua Diff
-    default_volume = cap.get("volume_diff", 0.01)
-
-    return {
-        "role": "COPY_MULTI",
-        "exchange": exec_exchange,
-        "symbol": exec_symbol,
-        "volume": as_float(execution.get("volume", default_volume), 0.01),
-        "order_key": f"QUEUE:ORDER:{exec_exchange}",
-        "position_key": f"POSITION:{exec_exchange}:{exec_symbol}",
-        "equity_key": f"ACCOUNT:{exec_exchange}:EQUITY",
-    }
+    executions = cap.get("executions") or []
+    if not isinstance(executions, list) or len(executions) == 0:
+        raise ValueError("trade_mode='copy_multi' bat buoc co mang 'executions'")
+    
+    parsed = []
+    for exec_cfg in executions:
+        exec_exchange = safe_upper(exec_cfg.get("exchange"))
+        exec_symbol = safe_upper(exec_cfg.get("symbol"))
+        copy_side = safe_upper(exec_cfg.get("copy_side", "DIFF"))
+        if not exec_exchange or not exec_symbol:
+            continue
+        
+        default_volume = cap.get(f"volume_{copy_side.lower()}", 0.01)
+        parsed.append({
+            "role": f"COPY_{copy_side}",
+            "copy_side": copy_side,
+            "exchange": exec_exchange,
+            "symbol": exec_symbol,
+            "volume": as_float(exec_cfg.get("volume", default_volume), 0.01),
+            "order_key": f"QUEUE:ORDER:{exec_exchange}",
+            "position_key": f"POSITION:{exec_exchange}:{exec_symbol}",
+            "equity_key": f"ACCOUNT:{exec_exchange}:EQUITY",
+        })
+    if len(parsed) == 0:
+        raise ValueError("Khong co execution hop le nao trong mang executions")
+    return parsed
 
 
 def infer_loai_lenh_from_side(side):

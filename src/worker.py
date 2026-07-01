@@ -174,7 +174,25 @@ else:
 # ==========================================
 gui_mode = config.get('gui_mode', False)
 dom_trader = None
-if gui_mode:
+need_dom = False
+for cap in matching_caps:
+    t_mode = str(cap.get('trade_mode', 'hedge')).strip().lower()
+    if t_mode == 'hedge':
+        need_dom = True
+        break
+    elif t_mode == 'single' or t_mode in ('copy_diff', 'copy_base'):
+        exec_cfg = cap.get('execution') or {}
+        if (str(exec_cfg.get('exchange', '')).strip().upper(), str(exec_cfg.get('symbol', '')).strip().upper()) == worker_key:
+            need_dom = True
+            break
+    elif t_mode == 'copy_multi':
+        for ex in cap.get('executions', []):
+            if (str(ex.get('exchange', '')).strip().upper(), str(ex.get('symbol', '')).strip().upper()) == worker_key:
+                need_dom = True
+                break
+        if need_dom: break
+
+if gui_mode and need_dom:
     # Lấy PID của tiến trình MT5 đang kết nối để tìm đúng DOM của sàn này
     terminal_info = mt5.terminal_info()
     mt5_pid = terminal_info.community_connection  # Fallback nếu không có trường PID
