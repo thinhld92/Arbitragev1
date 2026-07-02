@@ -139,7 +139,7 @@ def make_context(cap, execution, order_data, close_data):
     return {
         "trade_mode": "copy_diff",
         "is_single_cut": True,
-        "pair_token": order_data["id_lenh"],
+        "pair_token": order_data.get("id_lenh", "UNKNOWN"),
         "pair_id": cap["id"],
         "execution_exchange": execution["exchange"],
         "execution_symbol": execution["symbol"],
@@ -546,12 +546,13 @@ try:
                     if action_type == "COPY_DIFF_OPEN" or action_type == "COPY_BASE_OPEN":
                         if res.get("ticket"):
                             st["lich_su_lenh"].append({
+                                "id_lenh": context.get("job_id", f"MULTI_{res.get('ticket')}"),
                                 "ticket": res.get("ticket"),
                                 "loai_lenh": context.get("loai_lenh", "UNKNOWN"),
-                                "action": context.get("execution_side", "UNKNOWN"),
-                                "chenh_lech_vao": context.get("chenh_lech_vao", 0),
-                                "chenh_lech_vao_raw": context.get("chenh_lech_vao_raw", 0),
-                                "tinh_chat_vao": context.get("mode_vao", "UNKNOWN"),
+                                "action": context.get("execution_side", context.get("execution_action", "UNKNOWN")),
+                                "chenh_lech_vao": context.get("chenh_vao", context.get("chenh_lech_vao", 0)),
+                                "chenh_lech_vao_raw": context.get("chenh_vao_raw", context.get("chenh_lech_vao_raw", 0)),
+                                "tinh_chat_vao": context.get("tinh_chat_vao", context.get("mode_vao", "UNKNOWN")),
                                 "entry_spread_pivot": context.get("entry_spread_pivot", 0.0),
                                 "conf_dev_entry": context.get("conf_dev_entry", 0),
                                 "entry_stable_time": context.get("entry_stable_time", 0),
@@ -564,7 +565,7 @@ try:
                             luu_tri_nho()
                             print(f"[VAO LENH OK {ex_id}] -> Dang om: {len(st['lich_su_lenh'])} lenh. Huong: {st['huong_dang_danh']}")
 
-                    elif action_type == "COPY_DIFF_CLOSE" or action_type == "COPY_BASE_CLOSE":
+                    elif action_type in ("COPY_DIFF_CLOSE", "COPY_BASE_CLOSE", "CLOSE"):
                         if res.get("ticket"):
                             ticket_dong = res.get("ticket")
                             st["lich_su_lenh"] = [x for x in st["lich_su_lenh"] if str(x.get("ticket")) != str(ticket_dong)]
