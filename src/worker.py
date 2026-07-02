@@ -524,7 +524,8 @@ def thuc_thi_chi_thi(chi_thi, current_tick):
                     "entry_stable_time": context.get("entry_stable_time", context.get("conf_stable_time", 0)),
                     # Kẹp thêm các thông số cấu hình và Hz cho Kế toán
                     "tick_hz_base_in": context.get("tick_hz_base_in", 0),
-                    "tick_hz_diff_in": context.get("tick_hz_diff_in", 0)
+                    "tick_hz_diff_in": context.get("tick_hz_diff_in", 0),
+                    "context": context
                 }
                 # Gửi báo cáo vào hòm thư riêng của cặp này
                 pair_id = context.get("pair_id")

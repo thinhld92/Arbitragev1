@@ -750,6 +750,7 @@ try:
                     context = make_context(cap_hien_tai, ex, order_data, {})
                     context["action_type"] = f"{role}_OPEN"
                     context["loai_lenh"] = loai_lenh
+                    context["job_id"] = id_lenh
                     
                     comment = f"[COPY_MULTI {copy_side}] Dev={tin_hieu['chenh_lech']:+.2f}"
                     
