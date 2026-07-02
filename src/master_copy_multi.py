@@ -534,8 +534,8 @@ try:
                     break
                 try:
                     res = json.loads(raw_result)
-                    action_type = res.get("action_type")
                     context = res.get("context", {})
+                    action_type = context.get("action_type")
                     ex_id = f"{context.get('execution_exchange')}:{context.get('execution_symbol')}"
                     
                     if ex_id not in exec_states:
