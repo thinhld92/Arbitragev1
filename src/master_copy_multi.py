@@ -558,7 +558,7 @@ try:
                                 "entry_stable_time": context.get("entry_stable_time", 0),
                                 "tick_hz_base_in": context.get("tick_hz_base_in", 0),
                                 "tick_hz_diff_in": context.get("tick_hz_diff_in", 0),
-                                "time_msc": res.get("time_msc", 0),
+                                "time_entry": time.time(),
                             })
                             st["huong_dang_danh"] = context.get("loai_lenh")
                             st["thoi_diem_vao_lenh_cuoi"] = now_sec
@@ -634,9 +634,8 @@ try:
                         if order_data.get("pending_close"):
                             continue
                         
-                        # Tinh thoi gian lenh da song
-                        order_time_msc = order_data.get("time_msc", 0)
-                        thoi_gian_song = (now_sec - (order_time_msc / 1000.0)) if order_time_msc > 0 else 999999
+                        # Tinh thoi gian lenh da song (giong master_single)
+                        thoi_gian_song = time.time() - order_data.get("time_entry", 0)
                         
                         # Dong theo deviation - CHI KHI da giu lenh du hold_time
                         if dong_ly_thuyet and (hold_time_sec <= 0 or thoi_gian_song >= hold_time_sec):
