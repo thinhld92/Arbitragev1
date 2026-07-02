@@ -565,7 +565,7 @@ try:
                             luu_tri_nho()
                             print(f"[VAO LENH OK {ex_id}] -> Dang om: {len(st['lich_su_lenh'])} lenh. Huong: {st['huong_dang_danh']}")
 
-                    elif action_type in ("COPY_DIFF_CLOSE", "COPY_BASE_CLOSE", "CLOSE"):
+                    elif action_type in ("COPY_DIFF_CLOSE", "COPY_BASE_CLOSE", "CLOSE", "COPY_MULTI_CLOSE"):
                         if res.get("ticket"):
                             ticket_dong = res.get("ticket")
                             st["lich_su_lenh"] = [x for x in st["lich_su_lenh"] if str(x.get("ticket")) != str(ticket_dong)]
@@ -631,6 +631,8 @@ try:
                         tin_hieu_dong = {"chenh_lech": chenh_th1, "chenh_lech_raw": chenh_th1_raw, "spread_pivot": spread_pivot, "loai_dong": "TH2"}
                     
                     for order_data in st["lich_su_lenh"]:
+                        if order_data.get("pending_close"):
+                            continue
                         if dong_ly_thuyet:
                             comment = f"[DONG {huong}] Chenh <= Pivot | dev_close={dev_close}"
                             context_data = make_context(cap_hien_tai, ex, order_data, tin_hieu_dong)
@@ -644,10 +646,7 @@ try:
                                     "context": context_data,
                                 })
                             )
-                            # Tam thoi xoa de tranh spam
-                            st["lich_su_lenh"] = [x for x in st["lich_su_lenh"] if str(x.get("ticket")) != str(order_data["ticket"])]
-                            if not st["lich_su_lenh"]:
-                                st["huong_dang_danh"] = None
+                            order_data["pending_close"] = True
                             st["thoi_diem_vua_ra_lenh_dong"] = now_sec
                             print(f"[COPY_MULTI DONG {ex_id}] -> GUi lenh dong {order_data['ticket']}")
                             luu_tri_nho()
@@ -666,8 +665,7 @@ try:
                         if hoang_loan:
                             context_data = make_context(cap_hien_tai, ex, order_data, {"chenh_dong": 0, "chenh_dong_raw": 0, "mode_dong": "HOANG_LOAN", "action_type": f"{role}_CLOSE"})
                             r.lpush(ex["order_key"], json.dumps({"action": "CLOSE_BY_TICKET", "ticket": order_data["ticket"], "comment": hoang_loan_msg, "role": role, "context": context_data}))
-                            st["lich_su_lenh"] = [x for x in st["lich_su_lenh"] if str(x.get("ticket")) != str(order_data["ticket"])]
-                            if not st["lich_su_lenh"]: st["huong_dang_danh"] = None
+                            order_data["pending_close"] = True
                             st["thoi_diem_vua_ra_lenh_dong"] = now_sec
                             luu_tri_nho()
                             print(f"[COPY_MULTI {ex_id}] {hoang_loan_msg} Dong {order_data['ticket']}")
@@ -679,8 +677,7 @@ try:
                             if order_time_msc > 0 and (now_sec - (order_time_msc/1000.0) >= hold_time_sec):
                                 context_data = make_context(cap_hien_tai, ex, order_data, {"chenh_dong": 0, "chenh_dong_raw": 0, "mode_dong": "TIMEOUT", "action_type": f"{role}_CLOSE"})
                                 r.lpush(ex["order_key"], json.dumps({"action": "CLOSE_BY_TICKET", "ticket": order_data["ticket"], "comment": f"[TIMEOUT {hold_time_sec}s]", "role": role, "context": context_data}))
-                                st["lich_su_lenh"] = [x for x in st["lich_su_lenh"] if str(x.get("ticket")) != str(order_data["ticket"])]
-                                if not st["lich_su_lenh"]: st["huong_dang_danh"] = None
+                                order_data["pending_close"] = True
                                 st["thoi_diem_vua_ra_lenh_dong"] = now_sec
                                 luu_tri_nho()
                                 print(f"[COPY_MULTI {ex_id}] TIMEOUT Dong {order_data['ticket']}")
@@ -690,6 +687,11 @@ try:
                 if len(st["lich_su_lenh"]) == 0 and st["huong_dang_danh"] is not None:
                     if now_sec - st["thoi_diem_vao_lenh_cuoi"] > 10:
                         st["huong_dang_danh"] = None # Unlock if timeout and no order
+                
+                # Block vao lenh neu con lenh dang cho dong
+                co_lenh_pending_close = any(o.get("pending_close") for o in st["lich_su_lenh"])
+                if co_lenh_pending_close:
+                    continue
                         
                 co_tin_hieu = tin_hieu.get("hanh_dong") == "VAO_LENH"
                 if co_tin_hieu and len(st["lich_su_lenh"]) < max_orders:
