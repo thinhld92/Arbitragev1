@@ -657,25 +657,6 @@ try:
                             print(f"[COPY_MULTI DONG {ex_id}] -> GUi lenh dong {order_data['ticket']} (song {thoi_gian_song:.0f}s)")
                             luu_tri_nho()
                             continue
-                            
-                        # Dong hoang loan
-                        hoang_loan = False
-                        hoang_loan_msg = ""
-                        if huong == "TH1":
-                            hoang_loan = tin_hieu.get("hoang_loan_th1", False)
-                            hoang_loan_msg = "[HOANG LOAN TH1]"
-                        elif huong == "TH2":
-                            hoang_loan = tin_hieu.get("hoang_loan_th2", False)
-                            hoang_loan_msg = "[HOANG LOAN TH2]"
-                        
-                        if hoang_loan:
-                            context_data = make_context(cap_hien_tai, ex, order_data, {"chenh_dong": 0, "chenh_dong_raw": 0, "mode_dong": "HOANG_LOAN", "action_type": f"{role}_CLOSE"})
-                            r.lpush(ex["order_key"], json.dumps({"action": "CLOSE_BY_TICKET", "ticket": order_data["ticket"], "comment": hoang_loan_msg, "role": role, "context": context_data}))
-                            order_data["pending_close"] = True
-                            st["thoi_diem_vua_ra_lenh_dong"] = now_sec
-                            luu_tri_nho()
-                            print(f"[COPY_MULTI {ex_id}] {hoang_loan_msg} Dong {order_data['ticket']}")
-                            continue
                                 
                 # --- XU LY VAO LENH (OPEN) ---
                 if len(st["lich_su_lenh"]) == 0 and st["huong_dang_danh"] is not None:
