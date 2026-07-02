@@ -595,8 +595,37 @@ try:
             ask_diff = tick_diff["ask"]
             bid_diff = tick_diff["bid"]
             
-            # Tinh toan tin hieu arbitrage (Dung de mo lenh)
-            tin_hieu = check_tin_hieu_arbitrage(tick_base, tick_diff, cap_hien_tai, None)
+            # Tinh toan tin hieu arbitrage
+            # Xac dinh huong dang danh chung (cac execution cung base/diff)
+            huong_chung = None
+            for ex in executions:
+                ex_id_tmp = f"{ex['exchange']}:{ex['symbol']}"
+                h = exec_states[ex_id_tmp]["huong_dang_danh"]
+                if h is not None:
+                    huong_chung = h
+                    break
+            
+            tin_hieu = check_tin_hieu_arbitrage(tick_base, tick_diff, cap_hien_tai, huong_chung)
+            hanh_dong = tin_hieu["hanh_dong"]
+            
+            # Tracking stable_time (giong master_single)
+            if hanh_dong == "VAO_LENH":
+                if thoi_diem_bat_dau_lech_vao == 0:
+                    thoi_diem_bat_dau_lech_vao = time.time()
+                    gia_base_luc_bat_dau_lech = tick_base["bid"]
+                thoi_diem_bat_dau_lech_dong = 0
+                gia_base_luc_bat_dau_lech_dong = 0.0
+            elif hanh_dong == "DONG_LENH":
+                if thoi_diem_bat_dau_lech_dong == 0:
+                    thoi_diem_bat_dau_lech_dong = time.time()
+                    gia_base_luc_bat_dau_lech_dong = tick_base["bid"]
+                thoi_diem_bat_dau_lech_vao = 0
+                gia_base_luc_bat_dau_lech = 0.0
+            else:
+                thoi_diem_bat_dau_lech_vao = 0
+                thoi_diem_bat_dau_lech_dong = 0
+                gia_base_luc_bat_dau_lech = 0.0
+                gia_base_luc_bat_dau_lech_dong = 0.0
             
             # Tinh san cac chenh lech de dong lenh (Dong lenh tinh rieng cho tung execution)
             chenh_th1_raw = bid_base - ask_diff
@@ -637,8 +666,15 @@ try:
                         # Tinh thoi gian lenh da song (giong master_single)
                         thoi_gian_song = time.time() - order_data.get("time_entry", 0)
                         
-                        # Dong theo deviation - CHI KHI da giu lenh du hold_time
-                        if dong_ly_thuyet and (hold_time_sec <= 0 or thoi_gian_song >= hold_time_sec):
+                        # Stable time check cho dong lenh
+                        dk_stable_dong = (
+                            time.time() - thoi_diem_bat_dau_lech_dong >= stable_time_sec
+                            if stable_mode == "continuous"
+                            else time.time() - thoi_diem_nhan_tick_cuoi >= stable_time_sec
+                        ) if thoi_diem_bat_dau_lech_dong > 0 else False
+                        
+                        # Dong theo deviation - CHI KHI da giu lenh du hold_time VA stable_time
+                        if dong_ly_thuyet and dk_stable_dong and (hold_time_sec <= 0 or thoi_gian_song >= hold_time_sec):
                             comment = f"[DONG {huong}] Chenh <= Pivot | dev_close={dev_close}"
                             context_data = make_context(cap_hien_tai, ex, order_data, tin_hieu_dong)
                             r.lpush(
@@ -667,11 +703,20 @@ try:
                 if co_lenh_pending_close:
                     continue
                         
-                co_tin_hieu = tin_hieu.get("hanh_dong") == "VAO_LENH"
+                co_tin_hieu = hanh_dong == "VAO_LENH"
                 if co_tin_hieu and len(st["lich_su_lenh"]) < max_orders:
                     if now_sec - st["thoi_diem_vao_lenh_cuoi"] < cooldown_sec:
                         continue
                     if now_sec - st["thoi_diem_vua_ra_lenh_dong"] < cooldown_close_sec:
+                        continue
+                    
+                    # Stable time check cho vao lenh (giong master_single)
+                    dk_stable_vao = (
+                        time.time() - thoi_diem_bat_dau_lech_vao >= stable_time_sec
+                        if stable_mode == "continuous"
+                        else time.time() - thoi_diem_nhan_tick_cuoi >= stable_time_sec
+                    ) if thoi_diem_bat_dau_lech_vao > 0 else False
+                    if not dk_stable_vao:
                         continue
                         
                     # Target side
