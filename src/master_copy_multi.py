@@ -544,7 +544,7 @@ try:
                     st = exec_states[ex_id]
 
                     if action_type == "COPY_DIFF_OPEN" or action_type == "COPY_BASE_OPEN":
-                        if res.get("status") == "SUCCESS":
+                        if res.get("ticket"):
                             st["lich_su_lenh"].append({
                                 "ticket": res.get("ticket"),
                                 "loai_lenh": context.get("loai_lenh", "UNKNOWN"),
@@ -563,12 +563,9 @@ try:
                             st["thoi_diem_vao_lenh_cuoi"] = now_sec
                             luu_tri_nho()
                             print(f"[VAO LENH OK {ex_id}] -> Dang om: {len(st['lich_su_lenh'])} lenh. Huong: {st['huong_dang_danh']}")
-                        elif res.get("status") == "ERROR":
-                            if not st["lich_su_lenh"]:
-                                st["huong_dang_danh"] = None
 
                     elif action_type == "COPY_DIFF_CLOSE" or action_type == "COPY_BASE_CLOSE":
-                        if res.get("status") == "SUCCESS":
+                        if res.get("ticket"):
                             ticket_dong = res.get("ticket")
                             st["lich_su_lenh"] = [x for x in st["lich_su_lenh"] if str(x.get("ticket")) != str(ticket_dong)]
                             if not st["lich_su_lenh"]:
@@ -689,6 +686,10 @@ try:
                                 continue
                                 
                 # --- XU LY VAO LENH (OPEN) ---
+                if len(st["lich_su_lenh"]) == 0 and st["huong_dang_danh"] is not None:
+                    if now_sec - st["thoi_diem_vao_lenh_cuoi"] > 10:
+                        st["huong_dang_danh"] = None # Unlock if timeout and no order
+                        
                 co_tin_hieu = tin_hieu.get("hanh_dong") == "VAO_LENH"
                 if co_tin_hieu and len(st["lich_su_lenh"]) < max_orders:
                     if now_sec - st["thoi_diem_vao_lenh_cuoi"] < cooldown_sec:
