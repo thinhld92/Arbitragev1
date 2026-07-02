@@ -563,6 +563,9 @@ try:
                             st["thoi_diem_vao_lenh_cuoi"] = now_sec
                             luu_tri_nho()
                             print(f"[VAO LENH OK {ex_id}] -> Dang om: {len(st['lich_su_lenh'])} lenh. Huong: {st['huong_dang_danh']}")
+                        elif res.get("status") == "ERROR":
+                            if not st["lich_su_lenh"]:
+                                st["huong_dang_danh"] = None
 
                     elif action_type == "COPY_DIFF_CLOSE" or action_type == "COPY_BASE_CLOSE":
                         if res.get("status") == "SUCCESS":
@@ -722,8 +725,12 @@ try:
                     loai_lenh = "TH1" if tin_hieu["lenh_diff"] == "BUY" else "TH2"
                     if copy_side == "BASE":
                         loai_lenh = "TH1" if tin_hieu["lenh_base"] == "SELL" else "TH2"
+                        
+                    if st["huong_dang_danh"] is not None and st["huong_dang_danh"] != loai_lenh:
+                        continue
                     
                     st["thoi_diem_vao_lenh_cuoi"] = now_sec # Block spam
+                    st["huong_dang_danh"] = loai_lenh # Tentative lock
                     
                     # Tao context
                     id_lenh = f"O_{str(uuid.uuid4()).split('-')[0].upper()}"
