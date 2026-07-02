@@ -350,6 +350,16 @@ def thuc_thi_dong_1_lenh(pos, current_tick, comment, chi_thi, use_dom=False):
                 "context": chi_thi.get("context", {}) 
             }
             r.lpush("QUEUE:ACCOUNTANT", json.dumps(bien_lai))
+            
+            pair_id = chi_thi.get("context", {}).get("pair_id")
+            if pair_id:
+                report_close = {
+                    "ticket": pos.ticket,
+                    "action_type": "CLOSE",
+                    "context": chi_thi.get("context", {})
+                }
+                r.lpush(f"QUEUE:ORDER_RESULT:{pair_id}", json.dumps(report_close))
+                
             print(f"📤 [DEBUG] Đã gửi biên lai đóng lệnh #{pos.ticket} cho Kế toán | Role: {chi_thi.get('role')} | Token: {chi_thi.get('context', {}).get('pair_token', 'N/A')[:30]}")
         else:
             # 🛡️ VẪN GỬi biên lai (profit=0) để accountant không bị kẹt chờ
@@ -363,6 +373,15 @@ def thuc_thi_dong_1_lenh(pos, current_tick, comment, chi_thi, use_dom=False):
                 "context": chi_thi.get("context", {})
             }
             r.lpush("QUEUE:ACCOUNTANT", json.dumps(bien_lai))
+            
+            pair_id = chi_thi.get("context", {}).get("pair_id")
+            if pair_id:
+                report_close = {
+                    "ticket": pos.ticket,
+                    "action_type": "CLOSE",
+                    "context": chi_thi.get("context", {})
+                }
+                r.lpush(f"QUEUE:ORDER_RESULT:{pair_id}", json.dumps(report_close))
             
     else:
         # 🛡️ VẪN GỬi biên lai khi lệnh đóng FAIL để accountant không kẹt
