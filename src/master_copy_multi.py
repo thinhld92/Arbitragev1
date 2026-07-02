@@ -633,7 +633,13 @@ try:
                     for order_data in st["lich_su_lenh"]:
                         if order_data.get("pending_close"):
                             continue
-                        if dong_ly_thuyet:
+                        
+                        # Tinh thoi gian lenh da song
+                        order_time_msc = order_data.get("time_msc", 0)
+                        thoi_gian_song = (now_sec - (order_time_msc / 1000.0)) if order_time_msc > 0 else 999999
+                        
+                        # Dong theo deviation - CHI KHI da giu lenh du hold_time
+                        if dong_ly_thuyet and (hold_time_sec <= 0 or thoi_gian_song >= hold_time_sec):
                             comment = f"[DONG {huong}] Chenh <= Pivot | dev_close={dev_close}"
                             context_data = make_context(cap_hien_tai, ex, order_data, tin_hieu_dong)
                             r.lpush(
@@ -648,7 +654,7 @@ try:
                             )
                             order_data["pending_close"] = True
                             st["thoi_diem_vua_ra_lenh_dong"] = now_sec
-                            print(f"[COPY_MULTI DONG {ex_id}] -> GUi lenh dong {order_data['ticket']}")
+                            print(f"[COPY_MULTI DONG {ex_id}] -> GUi lenh dong {order_data['ticket']} (song {thoi_gian_song:.0f}s)")
                             luu_tri_nho()
                             continue
                             
@@ -670,18 +676,6 @@ try:
                             luu_tri_nho()
                             print(f"[COPY_MULTI {ex_id}] {hoang_loan_msg} Dong {order_data['ticket']}")
                             continue
-                            
-                        # Dong qua thoi gian
-                        if hold_time_sec > 0:
-                            order_time_msc = order_data.get("time_msc", 0)
-                            if order_time_msc > 0 and (now_sec - (order_time_msc/1000.0) >= hold_time_sec):
-                                context_data = make_context(cap_hien_tai, ex, order_data, {"chenh_dong": 0, "chenh_dong_raw": 0, "mode_dong": "TIMEOUT", "action_type": f"{role}_CLOSE"})
-                                r.lpush(ex["order_key"], json.dumps({"action": "CLOSE_BY_TICKET", "ticket": order_data["ticket"], "comment": f"[TIMEOUT {hold_time_sec}s]", "role": role, "context": context_data}))
-                                order_data["pending_close"] = True
-                                st["thoi_diem_vua_ra_lenh_dong"] = now_sec
-                                luu_tri_nho()
-                                print(f"[COPY_MULTI {ex_id}] TIMEOUT Dong {order_data['ticket']}")
-                                continue
                                 
                 # --- XU LY VAO LENH (OPEN) ---
                 if len(st["lich_su_lenh"]) == 0 and st["huong_dang_danh"] is not None:
