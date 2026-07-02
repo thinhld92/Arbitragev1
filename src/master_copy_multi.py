@@ -618,7 +618,7 @@ try:
                 
                 # --- XU LY DONG LENH (CLOSE) ---
                 if len(st["lich_su_lenh"]) > 0:
-                    if now_sec - st["thoi_diem_vao_lenh_cuoi"] < cooldown_close_sec:
+                    if now_sec - st["thoi_diem_vua_ra_lenh_dong"] < cooldown_close_sec:
                         continue
                     
                     huong = st["huong_dang_danh"]
@@ -655,7 +655,7 @@ try:
                             st["thoi_diem_vua_ra_lenh_dong"] = now_sec
                             print(f"[COPY_MULTI DONG {ex_id}] -> GUi lenh dong {order_data['ticket']} (song {thoi_gian_song:.0f}s)")
                             luu_tri_nho()
-                            continue
+                            break  # Chi dong 1 lenh moi lan, lenh tiep cho vong lap sau (cooldown)
                                 
                 # --- XU LY VAO LENH (OPEN) ---
                 if len(st["lich_su_lenh"]) == 0 and st["huong_dang_danh"] is not None:
