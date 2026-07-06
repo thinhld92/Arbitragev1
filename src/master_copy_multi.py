@@ -520,9 +520,6 @@ try:
                         pass
 
             if not tick_base.get("connected") or not tick_diff.get("connected"):
-                if now_sec - thoi_diem_spam_cuoi > 10:
-                    print(f"[DEBUG] BLOCKED: base_connected={tick_base.get('connected')} diff_connected={tick_diff.get('connected')}")
-                    thoi_diem_spam_cuoi = now_sec
                 time.sleep(0.01)
                 continue
 
@@ -531,9 +528,6 @@ try:
 
             if max_tick_delay > 0:
                 if delay_base > max_tick_delay or delay_diff > max_tick_delay:
-                    if now_sec - thoi_diem_spam_cuoi > 10:
-                        print(f"[DEBUG] BLOCKED: tick_delay base={delay_base:.1f}s diff={delay_diff:.1f}s > max={max_tick_delay}s")
-                        thoi_diem_spam_cuoi = now_sec
                     time.sleep(0.01)
                     continue
 
@@ -603,9 +597,6 @@ try:
                     print(f"Loi xu ly ket qua vao/ra: {e}")
 
             if da_xu_ly_lenh:
-                if now_sec - thoi_diem_spam_cuoi > 10:
-                    print(f"[DEBUG] BLOCKED: da_xu_ly_lenh=True (xu ly bien lai tu worker)")
-                    thoi_diem_spam_cuoi = now_sec
                 continue
 
             # 🆕 FORCE CLOSE HOURS: xa toan bo lenh khi trong gio cam
@@ -665,8 +656,6 @@ try:
                             list_pos_exec = parsed_pos
                     except Exception:
                         pass
-                elif not trong_thoi_gian_bao_ve and now_sec - thoi_diem_spam_cuoi > 30:
-                    print(f"[DEBUG ADOPT] {ex_id} position_key={ex['position_key']} -> EMPTY (worker chua publish?)")
                 
                 tickets_on_exchange = {p.get("ticket") for p in list_pos_exec if isinstance(p, dict)}
                 tracked_tickets = {o.get("ticket") for o in st["lich_su_lenh"]}
