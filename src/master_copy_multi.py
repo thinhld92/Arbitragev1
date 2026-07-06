@@ -520,6 +520,9 @@ try:
                         pass
 
             if not tick_base.get("connected") or not tick_diff.get("connected"):
+                if now_sec - thoi_diem_spam_cuoi > 10:
+                    print(f"[DEBUG] BLOCKED: base_connected={tick_base.get('connected')} diff_connected={tick_diff.get('connected')}")
+                    thoi_diem_spam_cuoi = now_sec
                 time.sleep(0.01)
                 continue
 
@@ -528,6 +531,9 @@ try:
 
             if max_tick_delay > 0:
                 if delay_base > max_tick_delay or delay_diff > max_tick_delay:
+                    if now_sec - thoi_diem_spam_cuoi > 10:
+                        print(f"[DEBUG] BLOCKED: tick_delay base={delay_base:.1f}s diff={delay_diff:.1f}s > max={max_tick_delay}s")
+                        thoi_diem_spam_cuoi = now_sec
                     time.sleep(0.01)
                     continue
 
@@ -597,6 +603,9 @@ try:
                     print(f"Loi xu ly ket qua vao/ra: {e}")
 
             if da_xu_ly_lenh:
+                if now_sec - thoi_diem_spam_cuoi > 10:
+                    print(f"[DEBUG] BLOCKED: da_xu_ly_lenh=True (xu ly bien lai tu worker)")
+                    thoi_diem_spam_cuoi = now_sec
                 continue
 
             # 🆕 FORCE CLOSE HOURS: xa toan bo lenh khi trong gio cam
