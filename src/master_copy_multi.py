@@ -656,6 +656,8 @@ try:
                             list_pos_exec = parsed_pos
                     except Exception:
                         pass
+                elif not trong_thoi_gian_bao_ve and now_sec - thoi_diem_spam_cuoi > 30:
+                    print(f"[DEBUG ADOPT] {ex_id} position_key={ex['position_key']} -> EMPTY (worker chua publish?)")
                 
                 tickets_on_exchange = {p.get("ticket") for p in list_pos_exec if isinstance(p, dict)}
                 tracked_tickets = {o.get("ticket") for o in st["lich_su_lenh"]}
