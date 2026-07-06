@@ -474,11 +474,16 @@ try:
             keys_to_get = [key_base, key_diff]
             for ex in executions:
                 keys_to_get.append(f"TICK:{ex['exchange']}:{ex['symbol']}")
+            # 🆕 Them position keys de doc position thuc tren san
+            for ex in executions:
+                keys_to_get.append(ex["position_key"])
             
             raw_data = r.mget(keys_to_get)
             last_tick_base_raw = raw_data[0]
             last_tick_diff_raw = raw_data[1]
-            exec_ticks_raw = raw_data[2:]
+            n_exec = len(executions)
+            exec_ticks_raw = raw_data[2:2 + n_exec]
+            exec_pos_raw = raw_data[2 + n_exec:]
 
             if last_tick_base_raw:
                 try:
@@ -535,7 +540,8 @@ try:
                 try:
                     res = json.loads(raw_result)
                     context = res.get("context", {})
-                    action_type = context.get("action_type")
+                    # 🆕 Đọc action_type từ top-level trước (worker report), fallback context
+                    action_type = res.get("action_type") or context.get("action_type")
                     ex_id = f"{context.get('execution_exchange')}:{context.get('execution_symbol')}"
                     
                     if ex_id not in exec_states:
@@ -574,12 +580,146 @@ try:
                             st["thoi_diem_vua_ra_lenh_dong"] = now_sec
                             luu_tri_nho()
                             print(f"[DONG LENH OK {ex_id}] -> Con lai: {len(st['lich_su_lenh'])} lenh. Huong: {st['huong_dang_danh']}")
+
+                    # 🆕 Xử lý CLOSE_FAILED: reset pending_close nhưng GIỮ lệnh trong sổ
+                    elif action_type == "CLOSE_FAILED":
+                        ticket_fail = res.get("ticket")
+                        for o in st["lich_su_lenh"]:
+                            if str(o.get("ticket")) == str(ticket_fail):
+                                o["pending_close"] = False
+                        # Cooldown dài hơn (30s) để tránh spam khi market đóng
+                        st["thoi_diem_vua_ra_lenh_dong"] = now_sec + 27
+                        luu_tri_nho()
+                        print(f"[CLOSE_FAILED {ex_id}] Ticket #{ticket_fail} - {res.get('comment', '')} ({res.get('retcode', '')}). Se thu lai sau 30s.")
+
                     da_xu_ly_lenh = True
                 except Exception as e:
                     print(f"Loi xu ly ket qua vao/ra: {e}")
 
             if da_xu_ly_lenh:
                 continue
+
+            # 🆕 FORCE CLOSE HOURS: xa toan bo lenh khi trong gio cam
+            trong_gio_force_close = kiem_tra_gio_cam(cap_hien_tai.get("force_close_hours", []), current_utc_time_str)
+            if trong_gio_force_close:
+                co_lenh_can_xa = False
+                for ex in executions:
+                    ex_id = f"{ex['exchange']}:{ex['symbol']}"
+                    st = exec_states[ex_id]
+                    if st["lich_su_lenh"]:
+                        co_lenh_can_xa = True
+                        for order_data in st["lich_su_lenh"][:]:
+                            if order_data.get("pending_close"):
+                                continue
+                            close_data = {
+                                "chenh_dong": 0, "chenh_dong_raw": 0,
+                                "close_spread_pivot": spread_pivot,
+                                "mode_dong": "[BLACKOUT_CUT]",
+                                "action_type": "BLACKOUT_CLOSE",
+                            }
+                            context_data = make_context(cap_hien_tai, ex, order_data, close_data)
+                            r.lpush(
+                                ex["order_key"],
+                                json.dumps({
+                                    "action": "CLOSE_BY_TICKET",
+                                    "ticket": order_data["ticket"],
+                                    "comment": "FORCE_CLOSE_HOURS",
+                                    "role": ex["role"],
+                                    "context": context_data,
+                                })
+                            )
+                            order_data["pending_close"] = True
+                            print(f"[FORCE_CLOSE {ex_id}] Xa lenh #{order_data['ticket']}")
+                        st["thoi_diem_vua_ra_lenh_dong"] = now_sec
+                if co_lenh_can_xa:
+                    luu_tri_nho()
+                    if now_sec - thoi_diem_spam_cuoi > 60:
+                        try:
+                            r.lpush(QUEUE_TELEGRAM, f"<b>{master_name} - FORCE CLOSE</b>\nXa toan bo lenh trong gio cam.")
+                        except Exception:
+                            pass
+                        thoi_diem_spam_cuoi = now_sec
+                continue
+
+            # 🆕 ORPHAN ADOPTION + STOPOUT DETECTION (giong master_single)
+            trong_thoi_gian_bao_ve = (now_sec - startup_time < STARTUP_GRACE_SECOND)
+            for i, ex in enumerate(executions):
+                ex_id = f"{ex['exchange']}:{ex['symbol']}"
+                st = exec_states[ex_id]
+                
+                # Parse position tu Redis
+                list_pos_exec = []
+                if exec_pos_raw[i]:
+                    try:
+                        parsed_pos = json.loads(exec_pos_raw[i])
+                        if isinstance(parsed_pos, list):
+                            list_pos_exec = parsed_pos
+                    except Exception:
+                        pass
+                
+                tickets_on_exchange = {p.get("ticket") for p in list_pos_exec if isinstance(p, dict)}
+                tracked_tickets = {o.get("ticket") for o in st["lich_su_lenh"]}
+                
+                if not trong_thoi_gian_bao_ve:
+                    # Phat hien lenh bien mat (stopout / dong tay)
+                    lenh_con_song = []
+                    for order_data in st["lich_su_lenh"]:
+                        if order_data.get("ticket") in tickets_on_exchange:
+                            lenh_con_song.append(order_data)
+                        elif order_data.get("pending_close"):
+                            lenh_con_song.append(order_data)  # Cho bien lai tu worker
+                        else:
+                            # Lenh bien mat, ghi so
+                            close_data = {
+                                "chenh_dong": 0, "chenh_dong_raw": 0,
+                                "close_spread_pivot": spread_pivot,
+                                "mode_dong": "[STOPOUT]",
+                                "action_type": "FORCE_CLOSE",
+                            }
+                            context_data = make_context(cap_hien_tai, ex, order_data, close_data)
+                            r.lpush(
+                                ex["order_key"],
+                                json.dumps({
+                                    "action": "FETCH_HISTORY_ONLY",
+                                    "ticket": order_data["ticket"],
+                                    "role": ex["role"],
+                                    "context": context_data,
+                                }),
+                            )
+                            print(f"[STOPOUT {ex_id}] Ticket #{order_data['ticket']} bien mat. Lay lich su.")
+                    
+                    if len(lenh_con_song) != len(st["lich_su_lenh"]):
+                        st["lich_su_lenh"] = lenh_con_song
+                        if not st["lich_su_lenh"]:
+                            st["huong_dang_danh"] = None
+                        luu_tri_nho()
+                    
+                    # Adopt orphan: lenh tren san nhung master khong biet
+                    untracked = [p for p in list_pos_exec if isinstance(p, dict) and p.get("ticket") not in tracked_tickets]
+                    for pos in untracked:
+                        side = safe_upper(pos.get("side", "UNKNOWN"))
+                        loai_lenh_pos = infer_loai_lenh_from_side(side)
+                        adopted = {
+                            "id_lenh": f"ADOPT_MULTI_{pos['ticket']}",
+                            "ticket": pos["ticket"],
+                            "action": side,
+                            "loai_lenh": loai_lenh_pos,
+                            "time_entry": time.time(),
+                            "chenh_lech_vao": 0,
+                            "chenh_lech_vao_raw": 0,
+                            "tinh_chat_vao": "[ADOPTED]",
+                            "entry_spread_pivot": spread_pivot,
+                            "conf_dev_entry": dev_entry,
+                            "entry_stable_time": stable_time_sec,
+                            "tick_hz_base_in": 0,
+                            "tick_hz_diff_in": 0,
+                        }
+                        st["lich_su_lenh"].append(adopted)
+                        if st["huong_dang_danh"] is None and loai_lenh_pos in ("TH1", "TH2"):
+                            st["huong_dang_danh"] = loai_lenh_pos
+                        print(f"[ADOPT {ex_id}] Adopt ticket #{pos['ticket']} {side} ({loai_lenh_pos}) vao so lenh.")
+                    if untracked:
+                        luu_tri_nho()
 
             # Kiem tra gio giao dich
             if not kiem_tra_gio_giao_dich(cap_hien_tai.get("trading_hours"), current_utc_time_str):

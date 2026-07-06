@@ -395,6 +395,17 @@ def thuc_thi_dong_1_lenh(pos, current_tick, comment, chi_thi, use_dom=False):
             "context": chi_thi.get("context", {})
         }
         r.lpush("QUEUE:ACCOUNTANT", json.dumps(bien_lai))
+        # 🆕 Gửi report CLOSE_FAILED để master reset pending_close và retry với cooldown dài
+        pair_id = chi_thi.get("context", {}).get("pair_id")
+        if pair_id:
+            report_fail = {
+                "ticket": pos.ticket,
+                "action_type": "CLOSE_FAILED",
+                "retcode": retcode,
+                "comment": comment_loi,
+                "context": chi_thi.get("context", {})
+            }
+            r.lpush(f"QUEUE:ORDER_RESULT:{pair_id}", json.dumps(report_fail))
         try:
             r_lpush(QUEUE_TELEGRAM, f"❌ <b>{bot_name} LỖI ĐÓNG LỆNH</b>\nTicket: #{pos.ticket} | Lỗi: {retcode} - {comment_loi}")
         except Exception:
@@ -573,6 +584,15 @@ def thuc_thi_chi_thi(chi_thi, current_tick):
                 "context": chi_thi.get("context", {})
             }
             r.lpush("QUEUE:ACCOUNTANT", json.dumps(bien_lai))
+            # 🆕 Gửi report CLOSE về master để master xóa lệnh khỏi sổ (ticket đã biến mất)
+            pair_id = chi_thi.get("context", {}).get("pair_id")
+            if pair_id:
+                report_gone = {
+                    "ticket": ticket_can_dong,
+                    "action_type": "CLOSE",
+                    "context": chi_thi.get("context", {})
+                }
+                r.lpush(f"QUEUE:ORDER_RESULT:{pair_id}", json.dumps(report_gone))
 
     elif action == "FETCH_HISTORY_ONLY":
         safe_submit(thuc_thi_dong_bo_lich_su, chi_thi)
