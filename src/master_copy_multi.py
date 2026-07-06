@@ -288,7 +288,11 @@ for ex in executions:
     ex_id = f"{ex['exchange']}:{ex['symbol']}"
     if ex_id in saved_state:
         exec_states[ex_id] = saved_state[ex_id]
-        print(f"[COPY_MULTI] Khoi phuc so lenh cho {ex_id}: {len(exec_states[ex_id]['lich_su_lenh'])} lenh.")
+        n_lenh = len(exec_states[ex_id]['lich_su_lenh'])
+        huong = exec_states[ex_id].get('huong_dang_danh', 'None')
+        print(f"[COPY_MULTI] Khoi phuc {ex_id}: {n_lenh} lenh | Huong: {huong}")
+        for o in exec_states[ex_id]['lich_su_lenh']:
+            print(f"  └─ Ticket #{o.get('ticket')} {o.get('action','?')} ({o.get('loai_lenh','?')}) | {o.get('tinh_chat_vao','?')}")
     else:
         exec_states[ex_id] = {
             "huong_dang_danh": None,
@@ -426,6 +430,7 @@ thoi_diem_bat_dau_lech_dong = 0
 gia_base_luc_bat_dau_lech = 0.0
 gia_base_luc_bat_dau_lech_dong = 0.0
 thoi_diem_spam_cuoi = 0
+da_in_tong_hop = False
 
 startup_time = time.time()
 STARTUP_GRACE_SECOND = cap_hien_tai.get("startup_grace_second", 15)
@@ -720,6 +725,20 @@ try:
                         print(f"[ADOPT {ex_id}] Adopt ticket #{pos['ticket']} {side} ({loai_lenh_pos}) vao so lenh.")
                     if untracked:
                         luu_tri_nho()
+
+            # In tong hop trang thai lenh (1 lan sau khi het bao ve)
+            if not trong_thoi_gian_bao_ve and not da_in_tong_hop:
+                tong = 0
+                parts = []
+                for ex in executions:
+                    eid = f"{ex['exchange']}:{ex['symbol']}"
+                    n = len(exec_states[eid]['lich_su_lenh'])
+                    h = exec_states[eid].get('huong_dang_danh', '-')
+                    parts.append(f"{eid}={n} lenh ({h})")
+                    tong += n
+                if tong > 0:
+                    print(f"[TONG HOP] Dang giu {tong} lenh: {' | '.join(parts)}")
+                da_in_tong_hop = True
 
             # Kiem tra gio giao dich
             if not kiem_tra_gio_giao_dich(cap_hien_tai.get("trading_hours"), current_utc_time_str):
