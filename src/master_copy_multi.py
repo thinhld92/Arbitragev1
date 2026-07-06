@@ -673,6 +673,8 @@ try:
                             lenh_con_song.append(order_data)
                         elif order_data.get("pending_close"):
                             lenh_con_song.append(order_data)  # Cho bien lai tu worker
+                        elif now_sec - order_data.get("time_entry", 0) < 10:
+                            lenh_con_song.append(order_data)  # Lenh moi vao, cho worker publish position
                         else:
                             # Lenh bien mat, ghi so
                             close_data = {
