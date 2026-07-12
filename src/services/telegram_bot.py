@@ -44,7 +44,14 @@ if not is_enabled or not bot_token or not chat_id:
     quit()
 
 # Kết nối Redis
-r = redis.Redis(host=redis_conf['host'], port=redis_conf['port'], db=redis_conf['db'], decode_responses=True)
+r = redis.Redis(
+    host=redis_conf['host'],
+    port=redis_conf['port'],
+    db=redis_conf['db'],
+    decode_responses=True,
+    socket_timeout=10.0,          # ⚡ Phải > blpop timeout (5s) để tránh TimeoutError giả
+    socket_connect_timeout=5.0,   # ⚡ Timeout kết nối ban đầu
+)
 QUEUE_TELEGRAM = "TELEGRAM_QUEUE"
 
 print("✅ Đã kết nối Redis! Đang chờ thông báo lỗi...")
@@ -78,13 +85,26 @@ thoi_gian_gui_cuoi = 0
 try:
     while True:
         # 1. Chờ lấy lỗi đầu tiên (Sẽ đứng im ở đây nếu không có lỗi, KHÔNG tốn CPU)
-        result = r.blpop(QUEUE_TELEGRAM, timeout=5)
+        try:
+            result = r.blpop(QUEUE_TELEGRAM, timeout=5)
+        except redis.exceptions.TimeoutError:
+            # ⚡ Socket timeout hoặc network jitter → coi như không có message, tiếp tục loop
+            result = None
+        except redis.exceptions.ConnectionError:
+            # ⚡ Redis mất kết nối tạm (restart, mất mạng) → chờ rồi thử lại
+            print("⚠️ Mất kết nối Redis, thử lại sau 3 giây...")
+            time.sleep(3)
+            continue
+
         if result is None:
             # 🛑 CHECK TÍN HIỆU TẮT BOT AN TOÀN khi không có tin nhắn
-            if r.get(SHUTDOWN_KEY):
-                print(f"\n🛑 [SHUTDOWN] Telegram Service nhận tín hiệu tắt!")
-                print(f"👋 Telegram Service đã nghỉ việc.")
-                break
+            try:
+                if r.get(SHUTDOWN_KEY):
+                    print(f"\n🛑 [SHUTDOWN] Telegram Service nhận tín hiệu tắt!")
+                    print(f"👋 Telegram Service đã nghỉ việc.")
+                    break
+            except (redis.exceptions.TimeoutError, redis.exceptions.ConnectionError):
+                pass  # Không check được shutdown thì bỏ qua, loop tiếp
             continue  # 🛡️ POT-5 FIX: Tránh crash khi timeout hoặc mất kết nối Redis
         queue_name, first_msg = result
         
