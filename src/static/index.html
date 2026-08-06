@@ -477,8 +477,9 @@ const chartOptions = {
     borderColor: 'rgba(99,132,255,0.12)',
     timeVisible: true,
     secondsVisible: true,
-    rightOffset: 5,
-    barSpacing: 6,
+    rightOffset: 2,
+    fixLeftEdge: true,
+    fixRightEdge: true,
   },
   handleScroll: { vertTouchDrag: false },
 };
@@ -745,15 +746,16 @@ function updateSpread(d) {
     th2Data.shift();
   }
 
-  // Ép time-scale hiển thị đủ 60 phút bằng cách mượn điểm đầu tiên, kéo dài về cutoff và làm tàng hình đoạn nối
+  // Ép time-scale hiển thị đủ 60 phút: chèn điểm neo ở cutoff (trái) và nowSec (phải)
   let displayTh1 = [...th1Data];
   let displayTh2 = [...th2Data];
+  
+  // Neo trái: chèn điểm ẩn ở cutoff
   if (displayTh1.length > 0 && displayTh1[0].time > cutoff + 2) {
     const anchorVal1 = displayTh1[0].value;
     const anchorVal2 = displayTh2[0].value;
     displayTh1.unshift({ time: cutoff, value: anchorVal1 });
     displayTh1[1] = { ...displayTh1[1], lineColor: 'transparent' };
-    
     displayTh2.unshift({ time: cutoff, value: anchorVal2 });
     displayTh2[1] = { ...displayTh2[1], lineColor: 'transparent' };
   }
@@ -762,9 +764,9 @@ function updateSpread(d) {
   th1Series.setData(displayTh1);
   th2Series.setData(displayTh2);
 
-  // Ép buộc khung nhìn của TimeScale
-  chart1.timeScale().setVisibleRange({ from: cutoff, to: nowSec + 10 });
-  chart2.timeScale().setVisibleRange({ from: cutoff, to: nowSec + 10 });
+  // Ép chart vừa khung — fitContent sẽ co giãn barSpacing tự động cho toàn bộ data
+  chart1.timeScale().fitContent();
+  chart2.timeScale().fitContent();
 }
 
 // --- WebSocket ---
@@ -813,12 +815,12 @@ function connectWebSocket() {
         
         let displayTh1 = [...th1Data];
         let displayTh2 = [...th2Data];
+        // Neo trái
         if (displayTh1.length > 0 && displayTh1[0].time > cutoff + 2) {
           const anchorVal1 = displayTh1[0].value;
           const anchorVal2 = displayTh2[0].value;
           displayTh1.unshift({ time: cutoff, value: anchorVal1 });
           displayTh1[1] = { ...displayTh1[1], lineColor: 'transparent' };
-          
           displayTh2.unshift({ time: cutoff, value: anchorVal2 });
           displayTh2[1] = { ...displayTh2[1], lineColor: 'transparent' };
         }
@@ -826,9 +828,8 @@ function connectWebSocket() {
         th1Series.setData(displayTh1);
         th2Series.setData(displayTh2);
         
-        // Ép buộc khung nhìn của TimeScale
-        chart1.timeScale().setVisibleRange({ from: cutoff, to: nowSec + 10 });
-        chart2.timeScale().setVisibleRange({ from: cutoff, to: nowSec + 10 });
+        chart1.timeScale().fitContent();
+        chart2.timeScale().fitContent();
         
         console.log(`Chart loaded: ${th1Data.length} points`);
         return;
