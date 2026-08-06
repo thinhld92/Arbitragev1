@@ -122,8 +122,8 @@ def build_redis_keys(cap):
 redis_keys = build_redis_keys(cap_hien_tai)
 
 # Pub/Sub channels
-PUB_TICK_BASE = f"TICK_PUB:{cap_hien_tai['base_exchange'].upper()}:{cap_hien_tai['base_symbol'].upper()}"
-PUB_TICK_DIFF = f"TICK_PUB:{cap_hien_tai['diff_exchange'].upper()}:{cap_hien_tai['diff_symbol'].upper()}"
+PUB_TICK_BASE = f"TICK_PUB:{cap_hien_tai['base_exchange'].upper()}:{cap_hien_tai['base_symbol']}"
+PUB_TICK_DIFF = f"TICK_PUB:{cap_hien_tai['diff_exchange'].upper()}:{cap_hien_tai['diff_symbol']}"
 
 # ==========================================
 # 4. BACKEND BUFFER (deque lưu 15 phút spread history)
@@ -491,7 +491,7 @@ if __name__ == "__main__":
     print(f"📊 SPREAD VIEWER đang khởi động...")
     print(f"   Pair: {args.pair_id}")
     print(f"   Port: {args.port}")
-    print(f"   Mode: Per-tick (Pub/Sub) + Backend Buffer (15 phút)")
+    print(f"   Mode: Per-tick (Pub/Sub) + Backend Buffer (60 phút)")
     print(f"   URL: http://localhost:{args.port}")
     print(f"   Redis: {redis_conf['host']}:{redis_conf['port']}")
     print()
