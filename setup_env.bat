@@ -35,11 +35,11 @@ python -m pip install --upgrade pip setuptools wheel
 if errorlevel 1 goto :error
 
 echo [5/6] Installing Python dependencies...
-python -m pip install MetaTrader5 redis requests ujson hiredis
+python -m pip install MetaTrader5 redis requests ujson hiredis fastapi uvicorn
 if errorlevel 1 goto :error
 
 echo [6/6] Verifying imports...
-python -c "import MetaTrader5, redis, requests, ujson, hiredis; print('Dependencies are ready.')"
+python -c "import MetaTrader5, redis, requests, ujson, hiredis, fastapi, uvicorn; print('Dependencies are ready.')"
 if errorlevel 1 goto :error
 
 echo.
