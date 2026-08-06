@@ -35,7 +35,7 @@ python -m pip install --upgrade pip setuptools wheel
 if errorlevel 1 goto :error
 
 echo [5/6] Installing Python dependencies...
-python -m pip install MetaTrader5 redis requests ujson hiredis fastapi uvicorn
+python -m pip install MetaTrader5 redis requests ujson hiredis fastapi "uvicorn[standard]"
 if errorlevel 1 goto :error
 
 echo [6/6] Verifying imports...
