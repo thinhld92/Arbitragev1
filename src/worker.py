@@ -106,6 +106,7 @@ REDIS_TICK_KEY = f"TICK:{args.broker.upper()}:{args.symbol}"
 REDIS_POS_KEY = f"POSITION:{args.broker.upper()}:{args.symbol}"
 REDIS_EQUITY_KEY = f"ACCOUNT:{args.broker.upper()}:EQUITY"
 QUEUE_ORDER_KEY = f"QUEUE:ORDER:{args.broker.upper()}"
+TICK_PUB_KEY = f"TICK_PUB:{args.broker.upper()}:{args.symbol}"  # 📊 Pub/Sub cho Spread Viewer
 QUEUE_TELEGRAM = "TELEGRAM_QUEUE"
 
 mt5_lock = threading.Lock()
@@ -616,6 +617,7 @@ json_dumps = json.dumps
 r_set = r.set
 r_rpop = r.rpop
 r_lpush = r.lpush
+r_publish = r.publish  # 📊 Fire-and-forget, không block
 mt5_symbol_info_tick = mt5.symbol_info_tick
 mt5_positions_get = mt5.positions_get
 mt5_account_info = mt5.account_info
@@ -678,7 +680,9 @@ try:
                     "connected": dang_co_mang,
                     "tick_hz": tick_count_60s # Mật độ nhảy giá 1 phút qua
                 }
-                r_set(REDIS_TICK_KEY, json_dumps(tick_data))
+                tick_data_json = json_dumps(tick_data)
+                r_set(REDIS_TICK_KEY, tick_data_json)
+                r_publish(TICK_PUB_KEY, tick_data_json)  # 📊 Per-tick cho Spread Viewer (fire-and-forget)
                 
                 trang_thai_mang = "OK" if dang_co_mang else "RỚT"
                 print(f"{bot_name} B: {tick.bid} | A: {tick.ask} | M: {trang_thai_mang} | {tick_count_60s} t/p", end='\r')

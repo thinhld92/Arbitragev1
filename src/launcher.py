@@ -131,5 +131,23 @@ command = 'start "KETOAN_TONG" cmd /k python src/accountant.py'
 subprocess.Popen(command, shell=True)
 time.sleep(2)
 
+# ==========================================
+# 4. BẬT BẢNG THEO DÕI SPREAD (WEB VIEWER)
+# ==========================================
+viewer_pair_id = danh_sach_cap[0]['id'] if danh_sach_cap else None
+if viewer_pair_id:
+    print(f"\n📊 ĐANG BẬT BẢNG THEO DÕI SPREAD (WEB VIEWER) cho {viewer_pair_id}...")
+    subprocess.Popen(
+        ['cmd', '/k', 'python', 'src/spread_viewer.py', '--pair_id', viewer_pair_id],
+        creationflags=subprocess.CREATE_NEW_CONSOLE
+    )
+    time.sleep(3)
+    # Tự động mở browser
+    try:
+        os.startfile('http://localhost:8899')
+    except Exception:
+        pass
+    print(f"   ✅ Spread Viewer đã sẵn sàng tại http://localhost:8899")
+
 print("\n✅ QUẢN ĐỐC ĐÃ BỐ TRÍ XONG TOÀN BỘ NHÂN SỰ!")
 print("👀 Hãy theo dõi các cửa sổ Terminal để xem hệ thống hoạt động.")
