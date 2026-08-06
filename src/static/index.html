@@ -490,7 +490,6 @@ const th1Series = chart1.addLineSeries({
   color: '#00d4ff',
   lineWidth: 2,
   priceLineVisible: false,
-  priceLineVisible: false,
   lastValueVisible: true,
   crosshairMarkerRadius: 4,
 });
@@ -501,7 +500,6 @@ const chart2 = LightweightCharts.createChart(chartContainer2, chartOptions);
 const th2Series = chart2.addLineSeries({
   color: '#ff7043',
   lineWidth: 2,
-  priceLineVisible: false,
   priceLineVisible: false,
   lastValueVisible: true,
   crosshairMarkerRadius: 4,
@@ -751,11 +749,13 @@ function updateSpread(d) {
   let displayTh1 = [...th1Data];
   let displayTh2 = [...th2Data];
   if (displayTh1.length > 0 && displayTh1[0].time > cutoff + 2) {
-    displayTh1[0] = { ...displayTh1[0], lineColor: 'transparent' };
-    displayTh1.unshift({ time: cutoff, value: displayTh1[0].value });
+    const anchorVal1 = displayTh1[0].value;
+    const anchorVal2 = displayTh2[0].value;
+    displayTh1.unshift({ time: cutoff, value: anchorVal1 });
+    displayTh1[1] = { ...displayTh1[1], lineColor: 'transparent' };
     
-    displayTh2[0] = { ...displayTh2[0], lineColor: 'transparent' };
-    displayTh2.unshift({ time: cutoff, value: displayTh2[0].value });
+    displayTh2.unshift({ time: cutoff, value: anchorVal2 });
+    displayTh2[1] = { ...displayTh2[1], lineColor: 'transparent' };
   }
 
   // Update chart
@@ -814,11 +814,13 @@ function connectWebSocket() {
         let displayTh1 = [...th1Data];
         let displayTh2 = [...th2Data];
         if (displayTh1.length > 0 && displayTh1[0].time > cutoff + 2) {
-          displayTh1[0] = { ...displayTh1[0], lineColor: 'transparent' };
-          displayTh1.unshift({ time: cutoff, value: displayTh1[0].value });
+          const anchorVal1 = displayTh1[0].value;
+          const anchorVal2 = displayTh2[0].value;
+          displayTh1.unshift({ time: cutoff, value: anchorVal1 });
+          displayTh1[1] = { ...displayTh1[1], lineColor: 'transparent' };
           
-          displayTh2[0] = { ...displayTh2[0], lineColor: 'transparent' };
-          displayTh2.unshift({ time: cutoff, value: displayTh2[0].value });
+          displayTh2.unshift({ time: cutoff, value: anchorVal2 });
+          displayTh2[1] = { ...displayTh2[1], lineColor: 'transparent' };
         }
 
         th1Series.setData(displayTh1);
